@@ -4,9 +4,10 @@ Versatile Hypervisor Core support kinds of RTOS
 # How to build
 
 ## build aarch64 hypervisor
-`bazel build //:all --platforms=//:linux_x86_64`
+`bazel build //:bin --platforms=//:linux_aarch64`
 
 ## build riscv64 hypervisor
 
-`bazel build //:all --platforms=//:linux_riscv64`
+`bazel build //:bin --platforms=//:linux_riscv64`
+
 # deps

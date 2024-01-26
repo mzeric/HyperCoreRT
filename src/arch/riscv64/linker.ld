@@ -21,7 +21,7 @@ SECTIONS{
   {
     *(.rodata .rodata.*)
     . = ALIGN(8);
-  } >RAM
+  }
 
   .data :  {
     *(.data)
@@ -29,7 +29,7 @@ SECTIONS{
     *(.readmostly.data)
     *(*.data)
     . = ALIGN(8);
-  }>RAM
+  }
 
   .bss (NOLOAD) :  {
     . = ALIGN(4);
@@ -55,7 +55,7 @@ SECTIONS{
     _stack_top_ = .;
   }
 
-  /* some compiler need this fix : prefer none-elf */
+  /* some compiler need this fix */
   .note.gnu.build-id : {
     *(.note.gnu.build-id)
   }
