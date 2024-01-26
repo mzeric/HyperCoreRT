@@ -5,6 +5,11 @@ module(
 
 bazel_dep(name = "platforms", version = "0.0.6")
 
-bazel_dep(name = "linaro_toolchain", version = "7.5")
+#bazel_dep(name = "linaro_toolchain", version = "7.5")
 
 bazel_dep(name = "riscv64_toolchain", version= "10.2.0")
+bazel_dep(name = "arm_toolchain_aarch64_none_elf", version= "10.3.1")
+#local_path_override(
+#	module_name="arm_toolchain_aarch64_none_elf",
+#	path="arm_toolchain_aarch64_none_elf-10.3.1"
+#)

@@ -1,0 +1,10 @@
+---
+Language:        Cpp
+BasedOnStyle:  LLVM
+IndentWidth: 4
+ColumnLimit: 80
+PointerAlignment: Left
+ContinuationIndentWidth: 8
+AlignAfterOpenBracket: DontAlign
+SortIncludes: false
+...

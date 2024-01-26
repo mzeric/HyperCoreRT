@@ -2,32 +2,73 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
-cc_binary(
-    name = "hyper-core",
+cc_library(
+    name = "start_head",
     srcs = select({
-        "@platforms//cpu:x86_64": glob(
-            ["src/arch/x86/**/**/*.c"],
-            ["src/arch/x86/**/**/*.s"],
-        ),
         "@platforms//cpu:aarch64": glob(
-            ["src/arch/aarch64/**/**/*.c"],
-            ["src/arch/aarch64/**/**/*.s"],
+            [
+                "src/arch/aarch64/**/*.c",
+                "src/arch/aarch64/**/*.s",
+            ],
         ),
         "@platforms//cpu:riscv64": glob(
-            ["src/arch/riscv/**/**/*.c"],
-            ["src/arch/riscv/**/**/*.s"],
+            [
+                "src/arch/riscv/**/*.c",
+                "src/arch/riscv/**/*.s",
+            ],
         ),
-    }) + glob(
-        ["src/**/**/*.c"],
-        exclude = ["src/arch/"],
-    ),
-    additional_linker_inputs = [
-        ":src/ld.script",
-    ],
+    }),
     copts = [
-        "-Wno-unused-value",
-        "-Wno-unused-function",
-        "-Wno-unused-variable",
+        "-Wall",
+        # "-fpic",
+    ],
+    alwayslink = True,
+)
+
+[cc_library(
+    name = "%s_file" % f,
+    srcs = [f],
+    visibility = ["//visibility:public"],
+) for f in [
+    "aarch64",
+    "riscv64",
+]]
+
+cc_library(
+    name = "utils",
+    srcs = glob(["src/utils/**/*.c"]),
+    copts = [
+        "-Wall",
+    ],
+    linkopts = [
+        "-lc",  # need newlib here
+        "-lgcc",
+    ],
+    alwayslink = True,
+)
+
+filegroup(
+    name = "linker_script",
+    srcs = [
+        "src/arch/aarch64/linker.ld",
+    ],
+)
+
+cc_binary(
+    name = "hyper-core",
+    srcs = glob(
+        ["src/core/**/*.c"],
+    ) + ["src/main.c"],
+    additional_linker_inputs = select({
+        "@platforms//cpu:aarch64": glob(["src/arch/aarch64/*.ld"]),
+        "@platforms//cpu:riscv64": glob(["src/arch/riscv64/*.ld"]),
+    }),
+    copts = [
+        # "-fno-stack-protector",
+        "-Wall",
+        # "-Wno-unused-value",
+        # "-Wno-unused-function",
+        # "-Wno-unused-variable",
         "-ffreestanding",
     ],
     includes = [
@@ -38,9 +79,14 @@ cc_binary(
         "-nostartfiles",
         "-nodefaultlibs",
         "-static",
-        "-Wl,--script=$(location :src/ld.script)",
-    ],
+    ] + select({
+        "@platforms//cpu:aarch64": ["-Wl,--script=$(location :src/arch/aarch64/linker.ld)"],
+        "@platforms//cpu:riscv64": ["-Wl,--script=$(location :src/arch/riscv64/linker.ld)"],
+        # "-Wl,--script=$(location linker_script)"
+    }),
     deps = [
+        ":start_head",
+        ":utils",
     ],
 )
 
