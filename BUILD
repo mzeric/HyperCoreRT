@@ -1,5 +1,4 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
-
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
@@ -8,16 +7,22 @@ cc_library(
         "@platforms//cpu:aarch64": glob(
             [
                 "src/arch/aarch64/**/*.c",
-                "src/arch/aarch64/**/*.s",
+                "src/arch/aarch64/**/*.S",
+                "src/arch/aarch64/**/*.h",
             ],
         ),
         "@platforms//cpu:riscv64": glob(
             [
-                "src/arch/riscv/**/*.c",
-                "src/arch/riscv/**/*.s",
+                "src/arch/riscv64/**/*.c",
+                "src/arch/riscv64/**/*.S",
+                "src/arch/riscv64/**/*.h",
             ],
         ),
     }),
+
+    includes = ["include/"],
+    hdrs = glob(["include/**/*.h"]),
+
     copts = [
         "-Wall",
         # "-fpic",
@@ -54,26 +59,31 @@ filegroup(
     ],
 )
 
-cc_binary(
+cc_library(
     name = "hyper-core",
     srcs = glob(
         ["src/core/**/*.c"],
+        ["src/core/**/*.h"],
     ) + ["src/main.c"],
+    copts = [
+        "-Wall",
+        "-ffreestanding",
+        "-fno-stack-protector",
+        "-fno-builtin",
+    ],
+    includes = [
+        "include/",
+    ],
+    hdrs = glob(["include/**/*.h"]),
+
+)
+
+cc_binary(
+    name = "hyper-elf",
     additional_linker_inputs = select({
         "@platforms//cpu:aarch64": glob(["src/arch/aarch64/*.ld"]),
         "@platforms//cpu:riscv64": glob(["src/arch/riscv64/*.ld"]),
     }),
-    copts = [
-        # "-fno-stack-protector",
-        "-Wall",
-        # "-Wno-unused-value",
-        # "-Wno-unused-function",
-        # "-Wno-unused-variable",
-        "-ffreestanding",
-    ],
-    includes = [
-        "include/**/*/*.h",
-    ],
     linkopts = [
         "-nostdlib",
         "-nostartfiles",
@@ -87,14 +97,15 @@ cc_binary(
     deps = [
         ":start_head",
         ":utils",
+        ":hyper-core",
     ],
 )
 
 genrule(
     name = "bin",
-    srcs = [":hyper-core"],
+    srcs = [":hyper-elf"],
     outs = ["core.bin"],
-    cmd = "$(OBJCOPY) -O binary $(location :hyper-core) $@",
+    cmd = "$(OBJCOPY) -O binary $(location :hyper-elf) $@",
     toolchains = ["@bazel_tools//tools/cpp:current_cc_toolchain"],
 )
 

@@ -1,3 +1,6 @@
+# ignore openconf
+
+include/config
 # Prerequisites
 *.d
 

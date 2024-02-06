@@ -10,6 +10,7 @@ MEMORY
 SECTIONS{
 
   . = ORIGIN(RAM);
+  . = ALIGN(0x1000);
   .text :{
     _text_start_ = .;
     *(.text.vector)

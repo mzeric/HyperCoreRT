@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-const char* magic = "HyperCore\n";
+const char* magic = "HyperCoreRT\n";
 
 void out_c(char c) { *(volatile uint32_t*)0x09000000 = c; }
 
@@ -29,6 +29,11 @@ void _itoa(uint32_t data, char* buf) {
     }
 }
 
+struct test_init_fini{
+
+
+};
+
 void out_hex(uint32_t data) {
     char buf[9];
     _itoa(data, buf);
@@ -45,6 +50,7 @@ int c_main(void) {
     char* hello = "HELLO";
     out_str(magic);
 
+vmm_devemu_emulate_read();
     while (1)
         ;
 }

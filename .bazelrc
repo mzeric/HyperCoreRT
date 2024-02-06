@@ -1,4 +1,5 @@
 build --enable_bzlmod
 build --registry=https://klx-soc.bj.bcebos.com/bazel/bcr/registry
 build --incompatible_enable_cc_toolchain_resolution
-build --cxxopt="-std=c++17"
+build --workspace_status_command=./scripts/gen_version.sh
+#build --copt="-include build/openconf.h"
