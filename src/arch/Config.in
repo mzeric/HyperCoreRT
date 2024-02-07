@@ -1,0 +1,26 @@
+choice
+	prompt "Target Architecture"
+	default CONFIG_ARCH_AARCH64
+	help
+	  The architecture of your target.
+
+config CONFIG_ARCH_AARCH64
+	bool "AArch64"
+	help
+	 ARM support
+
+config CONFIG_ARCH_RISCV64
+	bool "RISCV64"
+	help
+	  RISC-V support.
+
+endchoice
+
+if CONFIG_ARCH_AARCH64
+source "src/arch/aarch64/Config.in"
+endif
+
+if CONFIG_ARCH_RISCV64
+source "src/arch/riscv64/Config.in"
+endif
+

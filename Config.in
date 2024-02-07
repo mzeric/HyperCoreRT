@@ -1,0 +1,5 @@
+mainmenu "HyperCoreRT Configuration"
+
+source src/arch/Config.in
+source src/core/Config.in
+

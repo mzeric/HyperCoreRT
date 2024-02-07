@@ -1,6 +1,6 @@
 # ignore openconf
 
-include/config
+build
 # Prerequisites
 *.d
 

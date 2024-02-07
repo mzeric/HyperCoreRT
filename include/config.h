@@ -1,3 +1,3 @@
 #pragma once
-#include "config/openconf.h"
+#include "autoconf.h"
 #include "version.h"
