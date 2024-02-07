@@ -1,0 +1,14 @@
+config CONFIG_SMP
+    bool "multiprocessor support"
+    default y
+    depends on CONFIG_ARCH_AARCH64
+    help
+        if Target arch suport smp
+
+if CONFIG_SMP
+
+config CONFIG_SMP_CPU_NUM
+    int "CPU number"
+    range 1 16
+    default 4
+endif

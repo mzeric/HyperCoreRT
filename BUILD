@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
+
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
@@ -19,14 +20,12 @@ cc_library(
             ],
         ),
     }),
-
-    includes = ["include/"],
     hdrs = glob(["include/**/*.h"]),
-
     copts = [
         "-Wall",
         # "-fpic",
     ],
+    includes = ["include/"],
     alwayslink = True,
 )
 
@@ -52,19 +51,13 @@ cc_library(
     alwayslink = True,
 )
 
-filegroup(
-    name = "linker_script",
-    srcs = [
-        "src/arch/aarch64/linker.ld",
-    ],
-)
-
 cc_library(
     name = "hyper-core",
     srcs = glob(
         ["src/core/**/*.c"],
         ["src/core/**/*.h"],
     ) + ["src/main.c"],
+    hdrs = glob(["include/**/*.h"]),
     copts = [
         "-Wall",
         "-ffreestanding",
@@ -74,30 +67,39 @@ cc_library(
     includes = [
         "include/",
     ],
-    hdrs = glob(["include/**/*.h"]),
+)
 
+filegroup(
+    name = "linker_script",
+    srcs = select({
+        "@platforms//cpu:aarch64": glob(["src/arch/aarch64/*.ld*"]),
+        "@platforms//cpu:riscv64": glob(["src/arch/riscv64/*.ld*"]),
+    }),
+)
+
+genrule(
+    name = "ld_script",
+    srcs = [
+        "include/autoconf.h",
+        ":linker_script",
+    ],
+    outs = [":linker.lds"],
+    cmd = "$(CC) -E -x c $(location :linker_script) -Iinclude |grep -v \"\\#\" > $@",
+    toolchains = ["@bazel_tools//tools/cpp:current_cc_toolchain"],
 )
 
 cc_binary(
     name = "hyper-elf",
-    additional_linker_inputs = select({
-        "@platforms//cpu:aarch64": glob(["src/arch/aarch64/*.ld"]),
-        "@platforms//cpu:riscv64": glob(["src/arch/riscv64/*.ld"]),
-    }),
     linkopts = [
         "-nostdlib",
         "-nostartfiles",
         "-nodefaultlibs",
-        "-static",
-    ] + select({
-        "@platforms//cpu:aarch64": ["-Wl,--script=$(location :src/arch/aarch64/linker.ld)"],
-        "@platforms//cpu:riscv64": ["-Wl,--script=$(location :src/arch/riscv64/linker.ld)"],
-        # "-Wl,--script=$(location linker_script)"
-    }),
+    ] + ["-Wl,-T$(location :linker.lds)", "-Wl,--build-id=none"],
     deps = [
         ":start_head",
-        ":utils",
         ":hyper-core",
+        ":utils",
+        ":linker.lds",
     ],
 )
 

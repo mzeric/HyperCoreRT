@@ -1,19 +1,22 @@
+/*
+
+
+*/
+
+#include <autoconf.h>
+
 OUTPUT_FORMAT("elf64-littleaarch64")
 OUTPUT_ARCH("aarch64")
 ENTRY(_start);
 
-MEMORY
-{
-    RAM (rwx) : ORIGIN = 0x40000000, LENGTH = 128M
-}
-
 SECTIONS{
 
-  . = ORIGIN(RAM);
+  . = CONFIG_ENTRY_ADDR;
   . = ALIGN(0x1000);
   .text :{
     _text_start_ = .;
     *(.text.vector)
+    *(.text.*)
     *(.text)
     _text_end_  = .;
     . = ALIGN(4);
@@ -34,13 +37,16 @@ SECTIONS{
     . = ALIGN(8);
   }
 
-  .bss (NOLOAD) :  {
+  .bss :  {
     . = ALIGN(4);
-    _szero = .;
-    *(.bss .bss.*)
+		PROVIDE(_bss_start = .);
+    *(.bss)
+    *(.bss.*)
     *(COMMON)
     . = ALIGN(4);
-    _ezero = .;
+
+		PROVIDE(_bss_end = .);
+
   }
 
   /* reserse 1MB for printf/malloc */
@@ -58,10 +64,14 @@ SECTIONS{
     _stack_top_ = .;
   }
 
-  /* some compiler need this fix */
-  .note.gnu.build-id : {
-    *(.note.gnu.build-id)
-  }
+	.hvc_stack :
+	{
+		PROVIDE(_hvc_stack_start = .);
+		. = . + (CONFIG_INT_STACK_SIZE * CONFIG_SMP_CPU_NUM);
+		. = ALIGN(8);
+		PROVIDE(_hvc_stack_end = .);
+	}
+
   /DISCARD/ :
   {
       *(.comment)

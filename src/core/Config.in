@@ -1,0 +1,13 @@
+menu "Core Options"
+comment "configurations"
+
+
+
+config CONFIG_INT_STACK_SIZE
+	int "interrupt stack size"
+	default 4096
+
+config CONFIG_ENTRY_ADDR
+	int "entry addr"
+	default 0x40000000
+endmenu

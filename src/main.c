@@ -51,6 +51,7 @@ int c_main(void) {
     out_str(magic);
 
 vmm_devemu_emulate_read();
+init_hyper_low_level(NULL);
     while (1)
         ;
 }

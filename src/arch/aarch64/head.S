@@ -20,7 +20,7 @@ _start:
 	.align 2
 
 _head:
-	ldr x0, =_stack_top_
+	ldr x0, =_hvc_stack_end
 	mov sp, x0
 
 	bl _reset
