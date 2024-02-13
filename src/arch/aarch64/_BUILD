@@ -1,0 +1,34 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "aarch64",
+    srcs = glob([
+        "**/*.c",
+        # "src/arch/aarch64/**/*.S",
+        "**/*.h",
+    ]) + [":as_cpp"],
+    hdrs = glob(["include/**/*.h"]),
+    copts = [
+        "-Wall",
+        # "-fpic",
+    ],
+    includes = ["include/"],
+    alwayslink = True,
+)
+
+filegroup(
+    name = "ld_script",
+    srcs = glob(["*ld*"]),
+)
+
+genrule(
+    name = "as_cpp",
+    srcs = [
+        "head.S",
+    ],
+    outs = [":header.S"],
+    cmd = "$(CC) -E -x c $(location :head.S) -Iinclude |grep -v \"\\#\" > $@",
+    toolchains = ["@bazel_tools//tools/cpp:current_cc_toolchain"],
+)

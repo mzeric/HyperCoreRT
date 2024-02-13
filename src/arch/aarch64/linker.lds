@@ -12,7 +12,7 @@ ENTRY(_start);
 SECTIONS{
 
   . = CONFIG_ENTRY_ADDR;
-  . = ALIGN(0x1000);
+  _hyper_start = .;
   .text :{
     _text_start_ = .;
     *(.text.vector)
@@ -72,6 +72,7 @@ SECTIONS{
 		PROVIDE(_hvc_stack_end = .);
 	}
 
+  _hyper_end = .;
   /DISCARD/ :
   {
       *(.comment)

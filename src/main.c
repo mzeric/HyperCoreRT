@@ -40,7 +40,6 @@ void out_hex(uint32_t data) {
     buf[8] = 0;
     out_str(buf);
 }
-
 int c_main(void) {
     out_c('^');
     printf("----- booting -------\n");
@@ -52,6 +51,7 @@ int c_main(void) {
 
 vmm_devemu_emulate_read();
 init_hyper_low_level(NULL);
+
     while (1)
         ;
 }

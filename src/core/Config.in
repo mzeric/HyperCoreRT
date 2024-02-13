@@ -8,6 +8,6 @@ config CONFIG_INT_STACK_SIZE
 	default 4096
 
 config CONFIG_ENTRY_ADDR
-	int "entry addr"
+	hex "entry addr"
 	default 0x40000000
 endmenu

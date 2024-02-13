@@ -1,4 +1,5 @@
 #pragma once
+#include "compiler.h"
 
 #define vmm_debug(fmt, arg...)                                                 \
     do {                                                                       \
@@ -20,8 +21,20 @@
         printf("[Error][%s:%d]" fmt, __FUNCTION__, __LINE__, ##arg);           \
     } while (0)
 
+#define vmm_printf(fmt, arg...)                                                \
+    do {                                                                       \
+        printf(fmt "\n", ##arg);                                               \
+    } while (0)
+
 typedef struct {
     volatile long counter;
 } atomic_t;
+
+#define WARN_ON(p)                                                             \
+    do {                                                                       \
+        int real = (p);                                                        \
+        if (unlikely(real))                                                    \
+            vmm_warn(stringify(p));                                                    \
+    } while (0)
 
 #define __INIT__ __attribute__((section))

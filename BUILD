@@ -2,15 +2,32 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
+
+cc_library(
+    name = "aarch64_as",
+    srcs = glob([
+        "src/arch/aarch64/**/*.S",
+        "src/arch/aarch64/**/*.h",
+    ]),
+    hdrs = glob(["include/**/*.h"]),
+    includes = ["include/"],
+    copts = [
+        "-D__ASSEMBLY__",
+        "-Wall",
+    ],
+    alwayslink = True,
+)
+
 cc_library(
     name = "start_head",
     srcs = select({
         "@platforms//cpu:aarch64": glob(
             [
                 "src/arch/aarch64/**/*.c",
-                "src/arch/aarch64/**/*.S",
+                # "src/arch/aarch64/**/*.S",
                 "src/arch/aarch64/**/*.h",
-            ],
+
+            ]
         ),
         "@platforms//cpu:riscv64": glob(
             [
@@ -26,17 +43,11 @@ cc_library(
         # "-fpic",
     ],
     includes = ["include/"],
+    deps = [
+        ":aarch64_as",
+    ],
     alwayslink = True,
 )
-
-[cc_library(
-    name = "%s_file" % f,
-    srcs = [f],
-    visibility = ["//visibility:public"],
-) for f in [
-    "aarch64",
-    "riscv64",
-]]
 
 cc_library(
     name = "utils",
