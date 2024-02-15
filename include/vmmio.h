@@ -23,7 +23,7 @@
 
 #define vmm_printf(fmt, arg...)                                                \
     do {                                                                       \
-        printf(fmt "\n", ##arg);                                               \
+        printf(fmt , ##arg);                                               \
     } while (0)
 
 typedef struct {

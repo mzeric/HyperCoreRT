@@ -40,7 +40,7 @@ DEFINE_PAGE_TABLES(boot_third, (8 << 20) / ARM_PT_LEVEL_SIZE(2));
 
 DEFINE_PAGE_TABLES(uart_fix_map, (1 << 20) / ARM_PT_LEVEL_SIZE(2));
 
-uint64_t get_table_slot(paddr_t virt, uint8_t level) {
+uint64_t get_table_entry_idx(paddr_t virt, uint8_t level) {
     uint64_t mask = (1UL << ARM_PT_LPAE_SHIFT) - 1;
     uint64_t val = (virt >> ARM_PT_LEVEL_SHIFT(level)) & mask;
     return val;
@@ -50,15 +50,15 @@ uint64_t vir_to_phy(uint64_t v) {
     return v;
 }
 
-void create_table_entry_from_paddr(uint64_t *ptbl, paddr_t tbl, paddr_t virt, uint8_t level) {
-    int entry_idx = get_table_slot(virt, level);
+void create_table_entry_from_paddr(uint64_t *ptbl, paddr_t next_tbl, paddr_t virt, uint8_t level) {
+    int entry_idx = get_table_entry_idx(virt, level);
 
     // vmm_debug("set %p[%d] = %x\n", ptbl, entry_idx, (tbl | PT_PT));
-    ptbl[entry_idx] = (tbl | PT_PT);
+    ptbl[entry_idx] = (next_tbl | PT_PT);
 }
 
-void create_table_entry(uint64_t *ptbl, vaddr_t tbl, vaddr_t virt, uint8_t level) {
-    paddr_t addr = vir_to_phy(tbl);
+void create_table_entry(uint64_t *ptbl, vaddr_t next_tbl, vaddr_t virt, uint8_t level) {
+    paddr_t addr = vir_to_phy(next_tbl);
     create_table_entry_from_paddr(ptbl, addr, virt, level);
 }
 

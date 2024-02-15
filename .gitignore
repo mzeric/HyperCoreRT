@@ -1,8 +1,6 @@
 # ignore openconf
 
 build
-include/version.h
-include/autoconf.h
 # Prerequisites
 *.d
 

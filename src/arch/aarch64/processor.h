@@ -64,7 +64,7 @@ struct cpu_user_regs
     /* Return address and mode */
     __DECL_REG(pc,           pc32);             /* ELR_EL2 */
     uint64_t cpsr;                              /* SPSR_EL2 */
-    uint64_t hsr;                               /* ESR_EL2 */
+    uint64_t esr;                               /* ESR_EL2 */
 
     /* The kernel frame should be 16-byte aligned. */
     uint64_t pad0;
@@ -93,12 +93,15 @@ struct cpu_user_regs
 
 #undef __DECL_REG
 
-#else
+#else /* for head.S */
 
 #define UREGS_LR (8 * 30)
 #define UREGS_PC (8 * 32)
 #define UREGS_CPSR (8 * 33)
-#define UREGS_SPSR_el1 (8*36)
+#define UREGS_SPSR_el1 (8 * 36)
+
+#define UREGS_SP_el0 (8 * 39)
+#define UREGS_SP_el1 (8 * 40)
 #define UREGS_kernel_sizeof UREGS_SPSR_el1
 
 #endif /* __ASSEMBLY__ */
