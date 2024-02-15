@@ -22,7 +22,9 @@
 
 .global _reset
 .global _start
+.global _hang_head
 .global _stack_top_
+.global on_guest_excep_return
 .section .text.vector
 
 _start:
@@ -37,6 +39,8 @@ _start:
 .endif
 
 	.align 2
+_guest_head:
+        b .
 
 _head:
 	ldr x0, =_hvc_stack_end
@@ -53,6 +57,41 @@ _head:
         ldp     \xreg1, \xreg2, [sp], #16
         .endm
 
+/*
+ * Save/restore guest mode specific state, outer stack frame
+ */
+        .macro  excep_entry_guest
+
+        add     x21, sp, #UREGS_SPSR_el1
+        mrs     x23, SPSR_el1
+        str     x23, [x21]
+
+        add     x21, sp, #UREGS_SP_el0
+        mrs     x22, SP_el0
+        str     x22, [x21]
+
+        add     x21, sp, #UREGS_SP_el1
+        mrs     x22, SP_el1
+        mrs     x23, ELR_el1
+        stp     x22, x23, [x21]
+       .endm
+
+        .macro  excep_return_guest
+
+        add     x21, sp, #UREGS_SPSR_el1
+        ldr     x23, [x21]
+        msr     SPSR_el1, x23
+
+        add     x21, sp, #UREGS_SP_el0
+        ldr     x22, [x21]
+        msr     SP_el0, x22
+
+        add     x21, sp, #UREGS_SP_el1
+        ldp     x22, x23, [x21]
+        msr     SP_el1, x22
+        msr     ELR_el1, x23
+
+        .endm
 /*
  * Save state on entry to hypervisor, restore on exit
  *
@@ -94,6 +133,9 @@ _head:
         add     x21, sp, #UREGS_kernel_sizeof
 
         .else                /* Guest mode */
+
+        excep_entry_guest
+        mov     x21, ~0 /* sp only valid for hyp frame XXX */
 
         .endif
 
@@ -179,22 +221,28 @@ __vmm_vectors:
         ventry  guest_fiq_invalid_compat    /* FIQ 32-bit EL0/EL1 */
         ventry  guest_error_compat          /* Error 32-bit EL0/EL1 */
 
-.macro  call_excep, func, magic=-1
+.macro  call_excep, func, is_compat=0
 mov     x0, sp
-mov     x1, \magic
+mov     x1, \is_compat
 bl       \func
 .endm
 
-.macro excep_exit, hyp=1
+.macro excep_return, hyp=1
+
+.if \hyp == 0
+        bl on_guest_excep_return
+        excep_return_guest
+.endif
 b return_from_trap
 .endm
+
 hyp_sync_invalid:
 hyp_irq_invalid:
 hyp_fiq_invalid:
 hyp_error_invalid:
 		excep_entry
 		call_excep do_bad_mode, #0
-                excep_exit
+                excep_return
 
 hyp_sync:
 
@@ -205,20 +253,26 @@ hyp_sync:
 
         excep_entry
                 call_excep do_hyper_sync
-        excep_exit
+        excep_return
 hyp_irq:
 hyp_error:
+                excep_entry
 		call_excep do_bad_mode, #1
+                excep_return
 
 guest_sync:
 guest_irq:
 guest_fiq_invalid:
 guest_error:
-		call_excep do_bad_mode
+                excep_entry 0
+		call_excep do_guest_exception
+                excep_return
 
 guest_sync_compat:
 guest_irq_compat:
 guest_fiq_invalid_compat:
 guest_error_compat:
-		call_excep do_bad_mode
+                excep_entry 0
+		call_excep do_guest_exception, 1
+                excep_return
 

@@ -10,34 +10,7 @@
 #include "processor.h"
 #include "page.h"
 #include "mm.h"
-// #include <sys/types.h>
-
-/* MAIR_EL2 encodings */
-#define MAIR(val, idx)                  ((val) << ((idx) * 8))
-/* Attribute Indices */
-#define AINDEX_DEVICE_nGnRnE            0
-#define AINDEX_DEVICE_nGnRE         1
-#define AINDEX_DEVICE_nGRE          2
-#define AINDEX_DEVICE_GRE           3
-#define AINDEX_NORMAL_WT            4
-#define AINDEX_NORMAL_WB            5
-#define AINDEX_NORMAL_NC            6
-#define MAIR_EL2_VALUE                                                         \
-    (MAIR(0x00, AINDEX_DEVICE_nGnRnE) | MAIR(0x04, AINDEX_DEVICE_nGnRE) |      \
-            MAIR(0x08, AINDEX_DEVICE_nGRE) | MAIR(0x0c, AINDEX_DEVICE_GRE) |   \
-            MAIR(0xbb, AINDEX_NORMAL_WT) | MAIR(0xff, AINDEX_NORMAL_WB) |      \
-            MAIR(0x44, AINDEX_NORMAL_NC))
-
-#define TCR_EL2_VALUE                                                          \
-    (TCR_T0SZ_VAL(39) | TCR_PS_40BITS | (0x0 << TCR_TG0_SHIFT) |               \
-            (0x3 << TCR_SH0_SHIFT) | (0x1 << TCR_ORGN0_SHIFT) |                \
-            (0x1 << TCR_IRGN0_SHIFT))
-
-typedef unsigned long irq_flags_t;
-typedef unsigned long virtual_addr_t;
-typedef unsigned long virtual_size_t;
-typedef unsigned long physical_addr_t;
-typedef unsigned long physical_size_t;
+#include "execp.h"
 
 
 void init_mair(void) {
@@ -47,7 +20,7 @@ void init_mair(void) {
 struct mmu_lpae_entry_ctrl {
 	uint32_t ttbl_count;
 	uint64_t *next_ttbl;
-	virtual_addr_t ttbl_base;
+	vaddr_t ttbl_base;
 };
 
 struct mm_region {
@@ -60,7 +33,7 @@ struct vmm_mmu {
 
 };
 
-static inline void cpu_mmu_clean_invalidate(void *va)
+static inline void cpu_mmu_clean_invalidate(vaddr_t va)
 {
 	asm volatile("dc civac, %0\t\n"
 		     "dsb sy\t\n"
@@ -68,7 +41,7 @@ static inline void cpu_mmu_clean_invalidate(void *va)
 		     : : "r" ((unsigned long)va));
 }
 
-void arm_inv_cache_range(const void *base, size_t size)
+void arm_inv_cache_range(const vaddr_t base, size_t size)
 {
     unsigned            dcache_lsize = 0;
     static unsigned int cache_info   = 0;
@@ -91,7 +64,7 @@ void arm_inv_cache_range(const void *base, size_t size)
     asm volatile("dsb sy; isb" : : : "memory");
 }
 
-void arm_flush_cache_range(const void *base, size_t size)
+void arm_flush_cache_range(const vaddr_t base, size_t size)
 {
     unsigned            dcache_lsize = 0;
     static unsigned int cache_info   = 0;
@@ -114,35 +87,28 @@ void arm_flush_cache_range(const void *base, size_t size)
     asm volatile("dsb sy\nisb" : : : "memory");
 }
 
-static inline void cpu_mmu_invalidate_range(virtual_addr_t start,
-					    virtual_addr_t size)
+static inline void cpu_mmu_invalidate_range(vaddr_t start,
+					    vaddr_t size)
 {
 	arm_inv_cache_range(start, start + size);
 }
 
-void panic() {
-    printf("panic.........\n");
-    exit(1);
+void zero_bss(void) {
+    extern int _bss_start, _bss_end;
+    size_t size = (size_t)&_bss_end - (size_t)&_bss_start;
 
+    memset(&_bss_start, 0, size);
 }
-
-void zero_bss(void *start, void *end) {
-    vmm_debug("zero bss from %p -> %p\n", start, end);
-    memset(start, 0, end - start);
-}
-
 
 void init_stage1_mm(void ) {
 
 
-
 }
 
-extern int _bss_start, _bss_end;
 extern void *__vmm_vectors;
 
 void early_uart_init(void) {
-    vmm_printf("UART/PL011 Enabled");
+    vmm_printf("UART/PL011 Enabled\n");
 }
 
 void cpu_init(void) {
@@ -163,12 +129,14 @@ void cpu_init(void) {
     */
     // id = id > 5 ? 5 : id;
     vmm_debug("support %d physical address\n", id == 4 ? 44 : id == 5 ? 48 : -1);
-    uint64_t tcr_val = (TCR_RES1|TCR_SH0_IS|TCR_ORGN0_WBWA|TCR_IRGN0_WBWA|TCR_T0SZ(64-48));
+    uint64_t tcr_val = (TCR_RES1|TCR_SH0_IS|TCR_ORGN0_WBWA|TCR_IRGN0_WBWA|TCR_T0SZ(64-44));
     tcr_val |= (id<<16);
 
     /* such as: 0x8084_3510 */
     msr(tcr_el2, tcr_val);
+    vmm_info("TCR_EL2:%x\n", tcr_val);
     msr_sync(SCTLR_EL2, SCTLR_EL2_SET);
+
     /*
     * Ensure that any exceptions encountered at EL2
     * are handled using the EL2 stack pointer, rather
@@ -178,10 +146,7 @@ void cpu_init(void) {
 
 }
 
-static paddr_t p_start = 0x40000000;
-static paddr_t p_end = 0x50000000;
-
-void init_hyper_low_level(struct board_info *info) {
+int init_hyper_low_level(void *args) {
 
     uint64_t el;
 
@@ -190,7 +155,7 @@ void init_hyper_low_level(struct board_info *info) {
     asm("mrs	%0, CurrentEl": "=r" (el));
     if(current_el() != 2) {
         vmm_err("current EL is't EL2\n");
-        panic();
+        panic("");
     }
 
     cpu_init();
@@ -200,7 +165,7 @@ void init_hyper_low_level(struct board_info *info) {
     sctlr &= ~(CR_A);
     set_sctlr(sctlr);
 #endif
-    zero_bss(&_bss_start, &_bss_end);
+    zero_bss();
     write_sysreg(&__vmm_vectors, vbar_el2);
 
     init_mm();
@@ -211,10 +176,12 @@ void init_hyper_low_level(struct board_info *info) {
     vmm_debug("el: 0x%x, current_el:0x%x, cpu:%d\n", el, current_el(), aarch64_smp_id());
 
     vmm_info("=%x\n", mrs(VTTBR_EL2));
+    switch_to_el1();
+    /* test trap */
+    // *(char*)(0xa00000000) = 0;
 
-    *(char*)(0xa00000000) = 0;
-    3/0;
-
+    vmm_info("current el: %d\n", current_el());
     vmm_info("here\n");
 
+    return 0;
 }

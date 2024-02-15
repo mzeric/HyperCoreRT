@@ -183,7 +183,37 @@ typedef struct __packed {
     unsigned long sbz1:5;
 } lpae_p2m_t;
 
+typedef struct __packed{
+    /* These are used in all kinds of entry. */
+    unsigned long valid:1;      /* Valid mapping */
+    unsigned long table:1;      /* == 1 in 4k map entries too */
 
+    /*
+     * These ten bits are only used in Block entries and are ignored
+     * in Table entries.
+     */
+    unsigned long mattr:4;      /* Memory Attributes */
+    unsigned long read:1;       /* Read access */
+    unsigned long write:1;      /* Write access */
+    unsigned long sh:2;         /* Shareability */
+    unsigned long af:1;         /* Access Flag */
+    unsigned long sbz4:1;
+
+    /* The base address must be appropriately aligned for Block entries */
+    unsigned long long base:36; /* Base address of block or next table */
+    unsigned long sbz3:4;
+
+    /*
+     * These seven bits are only used in Block entries and are ignored
+     * in Table entries.
+     */
+    unsigned long contig:1;     /* In a block of 16 contiguous entries */
+    unsigned long sbz2:1;
+    unsigned long xn:1;         /* eXecute-Never */
+    unsigned long type:4;       /* Ignore by hardware. Used to store p2m types */
+
+    unsigned long sbz1:5;
+}lpae_block_t;
 /* Permission mask: xn, write, read */
 #define P2M_PERM_MASK (0x00400000000000C0ULL)
 #define P2M_CLEAR_PERM(pte) ((pte).bits & ~P2M_PERM_MASK)

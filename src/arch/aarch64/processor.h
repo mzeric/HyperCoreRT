@@ -64,7 +64,7 @@ struct cpu_user_regs
     /* Return address and mode */
     __DECL_REG(pc,           pc32);             /* ELR_EL2 */
     uint64_t cpsr;                              /* SPSR_EL2 */
-    uint64_t hsr;                               /* ESR_EL2 */
+    uint64_t esr;                               /* ESR_EL2 */
 
     /* The kernel frame should be 16-byte aligned. */
     uint64_t pad0;
@@ -93,12 +93,15 @@ struct cpu_user_regs
 
 #undef __DECL_REG
 
-#else
+#else /* for head.S */
 
 #define UREGS_LR (8 * 30)
 #define UREGS_PC (8 * 32)
 #define UREGS_CPSR (8 * 33)
-#define UREGS_SPSR_el1 (8*36)
+#define UREGS_SPSR_el1 (8 * 36)
+
+#define UREGS_SP_el0 (8 * 39)
+#define UREGS_SP_el1 (8 * 40)
 #define UREGS_kernel_sizeof UREGS_SPSR_el1
 
 #endif /* __ASSEMBLY__ */
@@ -115,24 +118,6 @@ struct cpu_user_regs
 
 #include "cpu_aarch64.h"
 
-
-/* TCR_EL2 */
-#define TCR_INITVAL					0x80800000
-#define TCR_TBI_MASK					0x00100000
-#define TCR_TBI_SHIFT					20
-#define TCR_PS_MASK					0x00070000
-#define TCR_PS_SHIFT					16
-#define TCR_TG0_MASK					0x0000c000
-#define TCR_TG0_SHIFT					14
-#define TCR_SH0_MASK					0x00003000
-#define TCR_SH0_SHIFT					12
-#define TCR_ORGN0_MASK					0x00000C00
-#define TCR_ORGN0_SHIFT					10
-#define TCR_IRGN0_MASK					0x00000300
-#define TCR_IRGN0_SHIFT					8
-#define TCR_T0SZ_MASK					0x0000003f
-#define TCR_T0SZ_SHIFT					0
-
 #define TCR_PS_32BITS					(0 << TCR_PS_SHIFT)
 #define TCR_PS_36BITS					(1 << TCR_PS_SHIFT)
 #define TCR_PS_40BITS					(2 << TCR_PS_SHIFT)
@@ -140,5 +125,3 @@ struct cpu_user_regs
 #define TCR_PS_44BITS					(4 << TCR_PS_SHIFT)
 #define TCR_PS_48BITS					(5 << TCR_PS_SHIFT)
 #define TCR_T0SZ_VAL(in_bits)				((64 - (in_bits)) & TCR_T0SZ_MASK)
-#if 0
-#endif

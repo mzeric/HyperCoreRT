@@ -13,7 +13,7 @@
 #define __aligned(x)		__attribute__((aligned(x)))
 #define __noreturn		__attribute__((noreturn))
 #define __notrace		__attribute__((no_instrument_function))
-#define __packed		__attribute__((packed))
+#define __packed		__attribute__((__packed__))
 #define __weak			__attribute__((weak))
 #define __mustcheck		__attribute__((warn_unused_result))
 #define __printf(a, b)		__attribute__((format(printf, a, b)))
@@ -37,3 +37,5 @@
 
 #define likely(x)     __builtin_expect(!!(x),1)
 #define unlikely(x)   __builtin_expect(!!(x),0)
+
+#define MARK_UNUSED(x) (void)(x)

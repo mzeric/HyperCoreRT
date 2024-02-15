@@ -7,7 +7,6 @@ typedef uint64_t u64;
 typedef uint32_t u32;
 typedef uint8_t  u8;
 
-#endif
 
 #define min(x,y) ({ \
         const typeof(x) _x = (x);       \
@@ -27,7 +26,15 @@ typedef uint8_t  u8;
         typeof( ((type *)0)->member ) *__mptr = (ptr);          \
         (type *)( (char *)__mptr - offsetof(type,member) );})
 
-#ifdef __RELEASE__
-#define ASSERT(p)
-#else
+
+typedef struct {
+        volatile uint64_t lock;
+} spinlock_t;
+
+
+#define BITS_PER_LONG (64)
+#define GENMASK(h, l) \
+    (((~0UL) << (l)) & (~0UL >> (BITS_PER_LONG - 1 - (h))))
+
+
 #endif

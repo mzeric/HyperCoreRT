@@ -23,7 +23,7 @@
 
 #define vmm_printf(fmt, arg...)                                                \
     do {                                                                       \
-        printf(fmt "\n", ##arg);                                               \
+        printf(fmt , ##arg);                                               \
     } while (0)
 
 typedef struct {
@@ -37,4 +37,5 @@ typedef struct {
             vmm_warn(stringify(p));                                                    \
     } while (0)
 
+#define vmm_exit(r) exit((r))
 #define __INIT__ __attribute__((section))

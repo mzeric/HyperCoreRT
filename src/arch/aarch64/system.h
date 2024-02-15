@@ -49,18 +49,6 @@
  */
 #define CPTR_EL2_RES1		(3 << 12 | 0x3ff)           /* Reserved, RES1 */
 
-/*
- * SCTLR_EL2 bits definitions
- */
-#define SCTLR_EL2_RES1		(3 << 28 | 3 << 22 | 1 << 18 | 1 << 16 |\
-				 1 << 11 | 3 << 4)	    /* Reserved, RES1 */
-#define SCTLR_EL2_EE_LE		(0 << 25) /* Exception Little-endian          */
-#define SCTLR_EL2_WXN_DIS	(0 << 19) /* Write permission is not XN       */
-#define SCTLR_EL2_ICACHE_DIS	(0 << 12) /* Instruction cache disabled       */
-#define SCTLR_EL2_SA_DIS	(0 << 3)  /* Stack Alignment Check disabled   */
-#define SCTLR_EL2_DCACHE_DIS	(0 << 2)  /* Data cache disabled              */
-#define SCTLR_EL2_ALIGN_DIS	(0 << 1)  /* Alignment check disabled         */
-#define SCTLR_EL2_MMU_DIS	(0)       /* MMU disabled                     */
 
 /*
  * CNTHCTL_EL2 bits definitions
@@ -187,15 +175,6 @@ static inline void set_sctlr(unsigned long val)
 		asm volatile("msr sctlr_el3, %0" : : "r" (val) : "cc");
 
 	asm volatile("isb");
-}
-
-static inline unsigned long read_mpidr(void)
-{
-	unsigned long val;
-
-	asm volatile("mrs %0, mpidr_el1" : "=r" (val));
-
-	return val;
 }
 
 static inline uint64_t aarch64_smp_id() {

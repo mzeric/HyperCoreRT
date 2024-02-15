@@ -258,7 +258,7 @@
 #define HCR_VM          (_AC(1,UL)<<0) /* Virtual MMU Enable */
 
 /* TCR: Stage 1 Translation Control */
-
+/* See Arm® Architecture Reference Manual, ARM DDI 0487E.a */
 #define TCR_T0SZ_SHIFT  (0)
 #define TCR_T1SZ_SHIFT  (16)
 #define TCR_T0SZ(x)     ((x)<<TCR_T0SZ_SHIFT)
@@ -477,15 +477,16 @@
 #define FSC_SPETT      (0x1c) /* Sync. Parity. Error Translation Table */
 #define FSC_AF         (0x21) /* Alignment Fault */
 #define FSC_DE         (0x22) /* Debug Event */
+#define FSC_TLB_FLT    (0x30) /* TLB conflict abort */
+#define FSC_UNS_STOMIC (0x31) /* Unsupported atomic hardware update fault */
 #define FSC_LKD        (0x34) /* Lockdown Abort */
+#define FSC_UNS_EXCL   (0x35) /* Unsupported Exclusive or Atomic access) */
 #define FSC_CPR        (0x3a) /* Coprocossor Abort */
 
 #define FSC_LL_MASK    (_AC(0x03,U)<<0)
 
 /* HPFAR_EL2: Hypervisor IPA Fault Address Register */
 #define HPFAR_MASK	GENMASK(39, 4)
-
-#define HPFAR_MASK	GENMASK(31, 4)
 
 
 /* Time counter hypervisor control register */

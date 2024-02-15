@@ -8,6 +8,8 @@
 #include "vmmio.h"
 #include "mm.h"
 #include "cpu_inline_asm.h"
+#include "execp.h"
+#include <errno.h>
 
 /*
 
@@ -27,155 +29,192 @@ Translation table lookup with 4KB pages:
 
 */
 
+/*
+
+    Translation table format D4.2.7
+
+
+*/
+
 #define PT_PT     0xf7f /* nG=1 AF=1 SH=11 AP=01 NS=1 ATTR=111 T=1 P=1 */
 #define PT_MEM    0xf7d /* nG=1 AF=1 SH=11 AP=01 NS=1 ATTR=111 T=0 P=1 */
 #define PT_MEM_L3 0xf7f /* nG=1 AF=1 SH=11 AP=01 NS=1 ATTR=111 T=1 P=1 */
 #define PT_DEV    0xe71 /* nG=1 AF=1 SH=10 AP=01 NS=1 ATTR=100 T=0 P=1 */
 #define PT_DEV_L3 0xe73 /* nG=1 AF=1 SH=10 AP=01 NS=1 ATTR=100 T=1 P=1 */
 
+#define BOOT_MAP_SIZE (16 << 20)
+
 DEFINE_PAGE_TABLE(boot_pgtable);
 DEFINE_PAGE_TABLE(boot_first);
 DEFINE_PAGE_TABLE(boot_second);
-DEFINE_PAGE_TABLES(boot_third, (8 << 20) / ARM_PT_LEVEL_SIZE(2));
+DEFINE_PAGE_TABLES(boot_fix, 512);
+DEFINE_PAGE_TABLES(boot_third, BOOT_MAP_SIZE / ARM_PT_LEVEL_SIZE(2));
 
-DEFINE_PAGE_TABLES(uart_fix_map, (1 << 20) / ARM_PT_LEVEL_SIZE(2));
+DEFINE_PAGE_TABLES(uart_fix_map, 1);
 
-uint64_t get_table_slot(paddr_t virt, uint8_t level) {
-    uint64_t mask = (1UL << ARM_PT_LPAE_SHIFT) - 1;
-    uint64_t val = (virt >> ARM_PT_LEVEL_SHIFT(level)) & mask;
-    return val;
+DEFINE_PAGE_TABLE(stage2_L0);
+DEFINE_PAGE_TABLE(stage2_L1);
+DEFINE_PAGE_TABLE(stage2_L2);
+DEFINE_PAGE_TABLE(stage2_L2_b);
+DEFINE_PAGE_TABLES(stage2_L3, BOOT_MAP_SIZE / ARM_PT_LEVEL_SIZE(2));
+DEFINE_PAGE_TABLES(stage2_L3_b, 1);
+
+#define PAGE_CNT (CONFIG_PHY_MEM_SIZE>>PAGE_SHIFT)
+
+#define DIRECT_MAPPING_VIRT_START (0xF00UL << 32) /* 0xF00_0000_0000 */
+#define DIRECT_MAPPING_VIRT_END (0xFF0UL << 32) /* 0xFF0_0000_0000 */
+
+#define PHYS_OFFSET CONFIG_ENTRY_ADDR
+#define VIRT_OFFSET DIRECT_MAPPING_VIRT_END
+
+#define VIRT_TO_PHYS(addr) (((addr)-VIRT_OFFSET) + PHYS_OFFSET)
+
+DEFINE_PAGE_TABLE(stage2_direct_mapping_L0);
+DEFINE_PAGE_TABLES(stage2_direct_mapping_L1, (CONFIG_PHY_MEM_SIZE)/ ARM_PT_LEVEL_SIZE(1)); /* reprent 512G space*/
+DEFINE_PAGE_TABLES(stage2_direct_mapping_L2, (CONFIG_PHY_MEM_SIZE)/ ARM_PT_LEVEL_SIZE(1));
+DEFINE_PAGE_TABLES(stage2_direct_mapping_L3, BOOT_MAP_SIZE / ARM_PT_LEVEL_SIZE(2));
+DEFINE_PAGE_TABLES(stage2_fix_mapping_L2, 512);
+
+
+/* 2MB one slot */
+void __fix_map(vaddr_t virt, paddr_t phys, int slot, int attr, lpae_t *table_L0, lpae_t *table_L1, lpae_t *fix) {
+
+    build_p2m_table(table_L0, (vaddr_t)table_L1, virt, 0, attr);
+    build_p2m_table(table_L1, (vaddr_t)&fix[slot], virt, 1, attr);
+
+    lpae_t e = make_lpae_entry(phys >> 12, attr);
+    e.pt.table = 0;
+    lpae_t *entry_start = &fix[slot];
+    entry_start[pte_offset(virt, 2)] = e;
+    // vmm_info("------ %p %p = %p\n", stage2_fix_mapping_L2, &entry_start[72], e.bits);
 }
 
-uint64_t vir_to_phy(uint64_t v) {
-    return v;
+void fix_map(vaddr_t virt, paddr_t phys, int slot, int attr) {
+    lpae_t* table_L0 = boot_pgtable;
+    lpae_t* table_L1 = boot_first;
+
+    __fix_map(virt, phys, slot, attr, table_L0, table_L1, boot_fix);
 }
 
-void create_table_entry_from_paddr(uint64_t *ptbl, paddr_t tbl, paddr_t virt, uint8_t level) {
-    int entry_idx = get_table_slot(virt, level);
-
-    // vmm_debug("set %p[%d] = %x\n", ptbl, entry_idx, (tbl | PT_PT));
-    ptbl[entry_idx] = (tbl | PT_PT);
+void fix_unmap(int slot) {
+    stage2_fix_mapping_L2[slot].bits = 0;
 }
 
-void create_table_entry(uint64_t *ptbl, vaddr_t tbl, vaddr_t virt, uint8_t level) {
-    paddr_t addr = vir_to_phy(tbl);
-    create_table_entry_from_paddr(ptbl, addr, virt, level);
+
+int build_hyper_two_level_page_table(vaddr_t virt_start, paddr_t phys_start, size_t mem_size, int attr) {
+
+    lpae_t *table_L0 = boot_pgtable;
+    lpae_t *table_L1 = boot_first;
+    lpae_t *table_L2 = boot_second;
+
+    return __build_hyper_two_level_page_table(virt_start, phys_start, mem_size,
+            attr, table_L0, table_L1, table_L2);
 }
 
-void create_uart_fix_map() {
-    paddr_t uart_phy_addr = 0x09000000;
-    vaddr_t uart_vir_addr = 0x09000000;
+int build_hyper_three_level_page_table(vaddr_t virt_start, paddr_t phys_start, size_t mem_size, int attr) {
 
-    create_table_entry(boot_pgtable, boot_first, uart_vir_addr, 0);
-    create_table_entry(boot_first, boot_second, uart_vir_addr, 1);
-    create_table_entry(boot_second, &uart_fix_map[0], uart_vir_addr, 2);
-
-    uint64_t *p = uart_fix_map;
-
-    p[0] = uart_phy_addr | PT_MEM_L3;
-
+    lpae_t* table_L0 = boot_pgtable;
+    lpae_t* table_L1 = boot_first;
+    lpae_t* table_L2 = boot_second;
+    lpae_t* table_L3 = boot_third;
+    return __build_hyper_three_level_page_table(virt_start, phys_start, mem_size,
+            attr, table_L0, table_L1, table_L2, table_L3);
 }
 
-void create_boot_page_tables(
-        vaddr_t virt_addr, paddr_t phys_addr, size_t map_size) {
+void dump_stage2_table(int level) {
+    vmm_info("summary: L0:%p, L1:%p, L2:%p, L3:%p\n", stage2_L0, stage2_L1, stage2_L2, stage2_L3);
+    vmm_info("%p\n", stage2_L0[0]);
+    vmm_info("%p, %p\n",boot_pgtable, boot_pgtable[0]);
+}
 
-    create_table_entry(boot_pgtable, boot_first, virt_addr, 0);
-    create_table_entry(boot_first, boot_second, virt_addr, 1);
+/*
+    L0 : static 512 Entry
+    L1 : static 512 Entry  per = 4K,  so one entry= 1G, total 512G
+    L2 : dynamic 512 Entry per = 4K， so one entry = 2M , total 1G
+    L3 : dynamic 512 Entry per = 4K,  so one entry = 4K, total 2M
 
-    int cnt = (8 << 20) / ARM_PT_LEVEL_SIZE(2);
-    vmm_info("debug:%x, %d\n", ARM_PT_LEVEL_SIZE(2), cnt);
-    vaddr_t addr = virt_addr;
-    for (int i = 0; i < cnt; ++i) {
-        /* setup L1(second) entrys */
-        paddr_t val = vir_to_phy(boot_third);
-        create_table_entry_from_paddr(boot_second, val, addr, 2);
-        val += ARM_PT_LEVEL_SIZE(2);
-        val += PAGE_SIZE;
+    we need check is_L2_valid & is_L3_valid
+
+*/
+#define ENTRY_VALID 1
+
+lpae_t* get_next_table(lpae_t* cur_level, vaddr_t addr, int level) {
+    int idx = pte_offset(addr, level);
+    lpae_t e = cur_level[idx];
+    return (lpae_t*)((vaddr_t)e.p2m.base << 12);
+}
+
+void create_uart_guest_map() {
+    paddr_t mem_start = 0x09000000;
+#if 1
+    int attr = p2m_ram_rw;
+    build_p2m_table(stage2_L0, (vaddr_t)stage2_L1, mem_start, 0, attr);
+    build_p2m_table(stage2_L1, (vaddr_t)stage2_L2_b, mem_start, 1, attr);
+    build_p2m_table(stage2_L2_b, (vaddr_t)stage2_L3_b, mem_start, 2, attr);
+
+    int idx = pte_offset(mem_start, 3);
+    // stage2_L2_b[72] = make_p2m_table_entry(stage2_L3_b, 0);
+    // stage2_L3_b[0] = make_p2m_table_entry(mem_start, 0);//
+    stage2_L3_b[idx].bits = 0x09000000 | 0x7ff;
+    // p[idx] = make_p2m_table_entry(0x40200000, p2m_mmio_direct_dev);
+    *(volatile unsigned long*)0x40200000 = 0xbeaf;
+    vmm_info("XXX:%p, %p\n", stage2_L2_b[72].bits, stage2_L3_b);
+    vmm_info("uart index: %d %d %d %d\n", pte_offset(mem_start, 0),
+            pte_offset(mem_start, 1),
+            pte_offset(mem_start, 2),
+            pte_offset(mem_start, 3));
+#endif
+}
+
+void enable_stage2_traslation(lpae_t *table_root) {
+
+    build_stage2_page_table(MEM_VIRT_START, MEM_VIRT_START, (10 << 20),
+            stage2_L0, stage2_L1, stage2_L2, stage2_L3, p2m_ram_rw);
+
+    create_uart_guest_map();
+
+    uint64_t val = VTCR_RES1|VTCR_SH0_IS|VTCR_ORGN0_WBWA|VTCR_IRGN0_WBWA;
+    val |= VTCR_TG0_4K;
+    val |= VTCR_PS(4) |VTCR_T0SZ(64-44);
+    val |= VTCR_SL0(2);
+
+    vmm_info("VTCR_EL2:%x\n", val);
+    msr_sync(vtcr_el2, val);
+
+
+    uint64_t vttbr_val = (uint64_t)stage2_L0 & (~0xFFFUL);
+    vttbr_val |= (0ul<<48);
+
+// #define INIT_ZERO_ADDR
+#ifdef INIT_ZERO_ADDR
+    /* init zero paging to capture NULL pointer issue */
+    vmm_debug("stage_L2_b:%p\n", stage2_L2_b);
+
+    // stage2_L0[0].bits = 0;
+    // stage2_L1[0].bits = 0;
+    void *entry_p = stage2_L2_b;
+    stage2_L1[0].bits = (uint64_t)entry_p | 0x7ff;
+    size_t addr = stage2_L3_b;
+    for(int i = 0; i < 1; ++i){
+        stage2_L2_b[i].bits = (uint64_t)addr | 0x7ff;
+        addr += PAGE_SIZE;
     }
 
-    int page_cnt = (map_size >> PAGE_SHIFT);
+    /* 0 addr */
 
-    paddr_t text_load_start = phys_addr;
-    paddr_t phy_addr =
-            ((text_load_start >> THIRD_SHIFT) << THIRD_SHIFT) | PT_MEM_L3;
+    stage2_L3_b[0].bits = 0x40100000|0x7ff;
+    vmm_info("%x\n", stage2_L1[1].bits);
+#endif
 
-    uint64_t* entry_p = (uint64_t*)boot_third;
-
-    vmm_debug("page_cnt:%d\n", page_cnt);
-    for (int i = 0; i < page_cnt; ++i) {
-        // vmm_debug("set l3 %p[%d] = %x\n", boot_third_p, i, x2);
-        entry_p[i] = phy_addr;
-        phy_addr += PAGE_SIZE;
-    }
-
-    create_uart_fix_map();
+    dump_stage2_table(0);
+    // vttbr_val = &enable_p2m;
+    msr_sync(VTTBR_EL2, vttbr_val);
 }
 
-lpae_t make_lpae_entry(mfn_t mfn, unsigned int attr)
-{
-    lpae_t e = (lpae_t) {
-        .pt = {
-            .valid = 1,           /* Mappings are present */
-            .table = 0,           /* Set to 1 for links and 4k maps */
-            .ai = attr,
-            .ns = 1,              /* Hyp mode is in the non-secure world */
-            .up = 1,              /* See below */
-            .ro = 0,              /* Assume read-write */
-            .af = 1,              /* No need for access tracking */
-            .ng = 1,              /* Makes TLB flushes easier */
-            .contig = 0,          /* Assume non-contiguous */
-            .xn = 1,              /* No need to execute outside .text */
-            .avail = 0,           /* Reference count for domheap mapping */
-        }};
-    /*
-     * For EL2 stage-1 page table, up (aka AP[1]) is RES1 as the translation
-     * regime applies to only one exception level (see D4.4.4 and G4.6.1
-     * in ARM DDI 0487B.a). If this changes, remember to update the
-     * hard-coded values in head.S too.
-     */
-
-    switch ( attr )
-    {
-    case MT_NORMAL_NC:
-        /*
-         * ARM ARM: Overlaying the shareability attribute (DDI
-         * 0406C.b B3-1376 to 1377)
-         *
-         * A memory region with a resultant memory type attribute of Normal,
-         * and a resultant cacheability attribute of Inner Non-cacheable,
-         * Outer Non-cacheable, must have a resultant shareability attribute
-         * of Outer Shareable, otherwise shareability is UNPREDICTABLE.
-         *
-         * On ARMv8 sharability is ignored and explicitly treated as Outer
-         * Shareable for Normal Inner Non_cacheable, Outer Non-cacheable.
-         */
-        e.pt.sh = LPAE_SH_OUTER;
-        break;
-    case MT_DEVICE_nGnRnE:
-    case MT_DEVICE_nGnRE:
-        /*
-         * Shareability is ignored for non-Normal memory, Outer is as
-         * good as anything.
-         *
-         * On ARMv8 sharability is ignored and explicitly treated as Outer
-         * Shareable for any device memory type.
-         */
-        e.pt.sh = LPAE_SH_OUTER;
-        break;
-    default:
-        e.pt.sh = LPAE_SH_INNER;  /* Xen mappings are SMP coherent */
-        break;
-    }
-
-    WARN_ON((mfn_to_maddr(mfn) & ~PADDR_MASK));
-
-    lpae_set_mfn(e, mfn);
-
-    return e;
-}
 
 void enable_mmu(void* table) {
     vmm_info("Enable paging\n");
+
     /* flush local TLB */
     asm volatile("dsb nshst\n\t"
                  "tlbi alle2\n\t"
@@ -204,8 +243,38 @@ void init_mm(void) {
     // size_t map_size alloced 8MB, only map real size
     size_t map_size = (paddr_t)&_hyper_end - (paddr_t)&_hyper_start;
     // MUST aligned by PAGE_SIZE
-    map_size = (map_size + PAGE_SIZE - 1 ) & PAGE_MASK;
 
-    create_boot_page_tables(MEM_VIRT_START, MEM_VIRT_START, map_size);
+
+#ifdef CONFIG_HOST_USE_2MB_MAPPING
+    map_size = (map_size + MB(2) - 1) & (~(MB(2) - 1));
+#else
+    map_size = (map_size + PAGE_SIZE - 1) & PAGE_MASK;
+
+#endif
+
+    vmm_info("image size: 0x%x\n", map_size);
+
+    asm volatile("msr sctlr_el1, xzr");
+
+    uint32_t hcr_val = get_default_hcr_flags();
+    //we only support AArch64 for now
+    hcr_val |= (1 << 31);
+    vmm_info("hcr: %x\n", hcr_val);
+    msr(hcr_el2, hcr_val);
+
+    size_t phy_memory_size = CONFIG_PHY_MEM_SIZE;
+
+#ifdef CONFIG_HOST_USE_2MB_MAPPING
+    build_hyper_two_level_page_table(MEM_VIRT_START, MEM_VIRT_START,
+            MEM_VIRT_START + (uint64_t)map_size, MT_NORMAL);
+#else
+    build_hyper_three_level_page_table(MEM_VIRT_START, MEM_VIRT_START, map_size, MT_NORMAL);
+#endif
+    fix_map(0x09000000, 0x09000000, 0, MT_NORMAL);
+    /* setup stage2 */
+    enable_stage2_traslation(stage2_L0);
+
+    // enable_mmu(stage2_direct_mapping_L0);
     enable_mmu(boot_pgtable);
+
 }

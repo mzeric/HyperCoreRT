@@ -10,4 +10,11 @@ config CONFIG_INT_STACK_SIZE
 config CONFIG_ENTRY_ADDR
 	hex "entry addr"
 	default 0x40000000
+
+config CONFIG_PHY_MEM_SIZE
+	hex "physical memory size"
+	default 0x800000
+config CONFIG_HOST_USE_2MB_MAPPING
+	bool "use 2MB page-mapping for hypervisor self"
+	default False
 endmenu
