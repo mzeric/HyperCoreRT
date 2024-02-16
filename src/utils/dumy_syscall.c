@@ -51,11 +51,12 @@ int _read(int file, char* ptr, int len) {
     return todo;
 }
 
+char* heap_end = NULL;
 caddr_t _sbrk(int incr) {
     extern char _heap_low_; /* Defined by the linker */
     extern char _heap_top_; /* Defined by the linker */
     char* prev_heap_end;
-    static char* heap_end = NULL;
+
 
     if (heap_end == 0) {
         heap_end = &_heap_low_;

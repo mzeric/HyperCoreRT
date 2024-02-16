@@ -88,29 +88,14 @@ uint64_t get_default_hcr_flags(void)
              HCR_TID3|HCR_TSC|HCR_TAC|HCR_SWIO|HCR_TIDCP|HCR_FB|HCR_TSW);
 }
 
-extern lpae_t boot_pgtable[];
+
 void switch_to_el1(void) {
     // msr(sctlr_el1, 0);
-    asm volatile("msr sctlr_el1, xzr");
 
-    uint32_t hcr_val = 0;//0x20|0x10|0x8|0x1;
-    hcr_val = get_default_hcr_flags();
-
-    //we only support AArch64 for now
-    hcr_val |= (1 << 31);
 
     // hcr_val &= ~1;//disable vmmu;
 
-    vmm_info("tbbr0_el1:%p\n", mrs(ttbr0_el1));
 
-
-    /* setup stage2 */
-    // uint64_t
-    msr_sync(VTTBR_EL2, boot_pgtable);
-
-
-    vmm_info("hcr: %x\n", hcr_val);
-    msr(hcr_el2, hcr_val);
     msr(elr_el1, guest_entry);
     msr(sp_el1, 0);
     msr(spsr_el2, 0x3c5);
@@ -122,17 +107,15 @@ void do_hyper_sync(struct cpu_user_regs *regs, int magic) {
 	uint64_t esr = mrs(esr_el2);
 	uint64_t far = mrs(far_el2);
 	uint64_t elr = mrs(elr_el2);
-    vmm_info("spsr: 0x%x, esr: %x, far:%x, elr:%x\n", regs->cpsr, esr, far, elr);
+    vmm_info("spsr: 0x%x, esr: %x, far:%x, elr:%x\n", regs->cpsr, esr, far, regs->lr);
 
     int ec = esr >> 26;
     vmm_info("Exception details: EC:0x%x, ISS:0x%x\n", ec, esr & 0x1ffffff);
 
-
-
-
     // switch_to_el1();
 
     vmm_info("spsr:%x, hcr_el2:%x\n", regs->cpsr, mrs(hcr_el2));
+    panic("panic");
 }
 
 void on_guest_excep_return(void ){

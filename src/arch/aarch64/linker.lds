@@ -56,14 +56,7 @@ SECTIONS{
     . += 0x100000;
     _heap_top_ = .;
   }
-
-  /* reverse 16KB stack */
-  .stack (NOLOAD): {
-    . = ALIGN(8);
-    . += 0x4000 ;/* stack 16KB */
-    _stack_top_ = .;
-  }
-
+.=ALIGN(0x1000);
 	.hvc_stack :
 	{
 		PROVIDE(_hvc_stack_start = .);
