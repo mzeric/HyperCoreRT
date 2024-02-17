@@ -8,6 +8,7 @@
 #include "vmmio.h"
 #include "mm.h"
 #include "cpu_inline_asm.h"
+#include <errno.h>
 
 /*
 
@@ -47,10 +48,13 @@ DEFINE_PAGE_TABLES(boot_third, (8 << 20) / ARM_PT_LEVEL_SIZE(2));
 
 DEFINE_PAGE_TABLES(uart_fix_map, 1);
 
-DEFINE_PAGE_TABLE(stage2_l0);
-DEFINE_PAGE_TABLE(stage2_11);
-DEFINE_PAGE_TABLE(stage2_l2);
-DEFINE_PAGE_TABLES(stage2_l3, (8 << 20) / ARM_PT_LEVEL_SIZE(2));
+DEFINE_PAGE_TABLE(stage2_L0);
+DEFINE_PAGE_TABLE(stage2_L1);
+// DEFINE_PAGE_TABLE(stage2_L1_b);
+DEFINE_PAGE_TABLE(stage2_L2);
+DEFINE_PAGE_TABLE(stage2_L2_b);
+DEFINE_PAGE_TABLES(stage2_L3, (8 << 20) / ARM_PT_LEVEL_SIZE(2));
+DEFINE_PAGE_TABLES(stage2_L3_b, (1 << 20) / ARM_PT_LEVEL_SIZE(2));
 
 
 uint64_t get_table_entry_idx(vaddr_t virt, uint8_t level) {
@@ -73,33 +77,33 @@ void build_p2m_table(lpae_t *table_current_level, vaddr_t next_tbl, vaddr_t virt
     int idx = get_table_entry_idx(virt, level);
     paddr_t addr = vir_to_phy(next_tbl);
     table_current_level[idx] = make_p2m_table_entry(addr);
+    // vmm_debug("%p[%d] = %p[0x%x]\n", table_current_level, idx, addr, table_current_level[idx].bits);
 }
 
-void build_stage2_page_table() {
-    build_p2m_table(stage2_l0, stage2_11, MEM_VIRT_START, 0);
-    build_p2m_table(stage2_11, stage2_l2, MEM_VIRT_START, 1);
+void build_stage2_page_table(vaddr_t mem_start, size_t map_size, lpae_t *L0, lpae_t *L1, lpae_t *L2, lpae_t *L3) {
+    build_p2m_table(L0, L1, mem_start, 0);
+    build_p2m_table(L1, L2, mem_start, 1);
 
-#define MAP_SIZE (8 << 20)
 
     int cnt = (8 << 20) / ARM_PT_LEVEL_SIZE(2);
     vmm_info("debug:%x, %d\n", ARM_PT_LEVEL_SIZE(2), cnt);
-    vaddr_t addr = MEM_VIRT_START;
-    paddr_t val = vir_to_phy(stage2_l3);
+    vaddr_t addr = mem_start;
+    paddr_t val = vir_to_phy(L3);
     for (int i = 0; i < cnt; ++i) {
         /* setup L1(second) entrys */
-        build_p2m_table(stage2_l2, val, addr, 2);
+        build_p2m_table(L2, val, addr, 2);
         val += PAGE_SIZE;
         addr += ARM_PT_LEVEL_SIZE(2);
     }
 
     /* fill L3: first 2MN */
-    cnt = MAP_SIZE >> PAGE_SHIFT;
+    cnt = map_size >> PAGE_SHIFT;
 
     // paddr_t phy_start =            ((MEM_VIRT_START >> THIRD_SHIFT) << THIRD_SHIFT) | PT_MEM_L3;
-    paddr_t phy_start = (MEM_VIRT_START >> THIRD_SHIFT) << THIRD_SHIFT;
-    lpae_t* entry = stage2_l3;
+    paddr_t phy_start = (mem_start >> THIRD_SHIFT) << THIRD_SHIFT;
+    lpae_t* entry = L3;
     for (int i = 0; i < cnt; ++i) {
-        // build_p2m_table(stage2_l3, phy_start, phy_start, 3);
+        // build_p2m_table(stage2_L3, phy_start, phy_start, 3);
         lpae_t p = make_p2m_table_entry(phy_start);
         entry[i] = p;
         phy_start += PAGE_SIZE;
@@ -321,13 +325,16 @@ static lpae_t mfn_to_p2m_entry(mfn_t mfn, p2m_type_t t, p2m_access_t a)
      * sh, xn and write bit will be defined in the following switches
      * based on mattr and t.
      */
+
     lpae_t e = (lpae_t) {
         .p2m.af = 1,
         .p2m.read = 1,
         .p2m.table = 1,
         .p2m.valid = 1,
-        .p2m.type = t,
+        // .p2m.type = 1,
+        .p2m.sbz1 = 0,
     };
+
 
     // BUILD_BUG_ON(p2m_max_real_type > (1 << 4));
 
@@ -377,18 +384,97 @@ static lpae_t mfn_to_p2m_entry(mfn_t mfn, p2m_type_t t, p2m_access_t a)
 
 lpae_t make_p2m_table_entry(vaddr_t virt) {
 
-    return mfn_to_p2m_entry(virt, p2m_ram_rw, p2m_access_rwx);
+    return mfn_to_p2m_entry(virt >> PAGE_SHIFT, p2m_ram_rw, p2m_access_rwx);
 }
 
+void dump_stage2_table(int level) {
+    vmm_info("summary: L0:%p, L1:%p, L2:%p, L3:%p\n", stage2_L0, stage2_L1, stage2_L2, stage2_L3);
+    vmm_info("%p\n", stage2_L0[0]);
+    vmm_info("%p, %p\n",boot_pgtable, boot_pgtable[0]);
+}
+
+/*
+    L0 : static 512 Entry
+    L1 : static 512 Entry  per = 4K,  so one entry= 1G, total 512G
+    L2 : dynamic 512 Entry per = 4K， so one entry = 2M , total 1G
+    L3 : dynamic 512 Entry per = 4K,  so one entry = 4K, total 2M
+
+    we need check is_L2_valid & is_L3_valid
+
+*/
+#define ENTRY_VALID 1
+
+lpae_t* get_next_table(lpae_t* cur_level, vaddr_t addr, int level) {
+    int idx = get_table_entry_idx(addr, level);
+    lpae_t e = cur_level[idx];
+    return (lpae_t*)((vaddr_t)e.p2m.base << 12);
+}
+
+int is_L0_valid(lpae_t *root, vaddr_t addr){
+    MARK_UNUSED(addr);
+    return ENTRY_VALID;
+}
+
+int is_L1_valid(lpae_t *root, vaddr_t addr){
+    lpae_t* L1_table = get_next_table(root, addr, 0);
+    int idx = get_table_entry_idx(addr, 1);
+
+    return L1_table[idx].p2m.valid;
+}
+
+int is_L2_valid(lpae_t *root, vaddr_t addr) {
+    lpae_t* L1_table = get_next_table(root, addr, 0);
+    int idx = get_table_entry_idx(addr, 2);
+}
+
+int map_ipa_to_phys(lpae_t *ttbl, vaddr_t ipa, paddr_t phys) {
+
+    return 0;
+}
+
+
 void enable_p2m(lpae_t *table_root) {
-    build_stage2_page_table();
+    build_stage2_page_table(MEM_VIRT_START, (8<<20), stage2_L0, stage2_L1, stage2_L2, stage2_L3);
+    build_stage2_page_table(0x09000000, PAGE_SIZE, stage2_L0, stage2_L1, stage2_L2_b, stage2_L3_b);
 
     uint64_t val = VTCR_RES1|VTCR_SH0_IS|VTCR_ORGN0_WBWA|VTCR_IRGN0_WBWA;
     val |= VTCR_TG0_4K;
+    val |= VTCR_PS(4) |VTCR_T0SZ(64-44);
+    val |= VTCR_SL0(2);
 
+    vmm_info("VTCR_EL2:%x\n", val);
     msr_sync(vtcr_el2, val);
+    void *ptr = malloc(4000);
+    void *ptr2 = memalign(0x1000, 0x1000);
+    vmm_info("ptr:%p, ptr2:%p\n", ptr, ptr2);
+    free(ptr);free(ptr2);
 
-    msr_sync(VTTBR_EL2, stage2_l0);
+    uint64_t vttbr_val = (uint64_t)stage2_L0 & (~0xFFFUL);
+    vttbr_val |= (0<<48);
+
+#define INIT_ZERO_ADDR
+#ifdef INIT_ZERO_ADDR
+    /* init zero paging to capture NULL pointer issue */
+    vmm_debug("stage_L2_b:%p\n", stage2_L2_b);
+
+    // stage2_L0[0].bits = 0;
+    // stage2_L1[0].bits = 0;
+    void *entry_p = stage2_L2_b;
+    stage2_L1[0].bits = (uint64_t)entry_p | 0x7ff;
+    size_t addr = stage2_L3_b;
+    for(int i = 0; i < 1; ++i){
+        stage2_L2_b[i].bits = (uint64_t)addr | 0x7ff;
+        addr += PAGE_SIZE;
+    }
+
+    /* 0 addr */
+
+    stage2_L3_b[0].bits = 0x40100000|0x7ff;
+    vmm_info("%x\n", stage2_L1[1].bits);
+#endif
+    dump_stage2_table(0);
+    // vttbr_val = &enable_p2m;
+    msr_sync(VTTBR_EL2, vttbr_val);
 }
 
 
@@ -436,7 +522,7 @@ void init_mm(void) {
 
     /* setup stage2 */
     // uint64_t
-    enable_p2m(stage2_l0);
+    enable_p2m(stage2_L0);
 
 
 

@@ -189,15 +189,6 @@ static inline void set_sctlr(unsigned long val)
 	asm volatile("isb");
 }
 
-static inline unsigned long read_mpidr(void)
-{
-	unsigned long val;
-
-	asm volatile("mrs %0, mpidr_el1" : "=r" (val));
-
-	return val;
-}
-
 static inline uint64_t aarch64_smp_id() {
 	unsigned long val;
 	asm volatile("mrs %0, tpidr_el2": "=r"(val));

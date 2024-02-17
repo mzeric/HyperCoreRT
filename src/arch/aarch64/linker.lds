@@ -53,7 +53,7 @@ SECTIONS{
   .dymem (NOLOAD): {
     . = ALIGN(8);
     _heap_low_ = .;
-    . += 0x100000;
+    . += 0x200000;
     _heap_top_ = .;
   }
 .=ALIGN(0x1000);
@@ -66,6 +66,13 @@ SECTIONS{
 	}
 
   _hyper_end = .;
+
+  .guest_test_stack :
+  {
+    PROVIDE(_guest_stack = .);
+    . += 0x1000;
+    PROVIDE(_guest_stack_end = .);
+  }
   /DISCARD/ :
   {
       *(.comment)

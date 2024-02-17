@@ -3,6 +3,7 @@
 #include "cpu_inline_asm.h"
 #include "execp.h"
 #include "page.h"
+#include "system.h"
 
 /*
 
@@ -55,7 +56,6 @@ void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
     uint64_t spsr_el1 = mrs(spsr_el1);
 
     vmm_debug("GUEST excep spsr:%x, elr:%x\n", regs->cpsr, elr);
-    vmm_debug("el:%d\n", mrs(CurrentEL));
 
     const union esr esr = { .bits = regs->esr };
 
@@ -68,7 +68,7 @@ void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
             vmm_info("gva:%p, ipa:%p\n", get_gva(), get_ipa());
             break;
         case HSR_EC_DATA_ABORT_LOWER_EL:
-            vmm_info("guest dabt addr:%p\n", elr);
+            vmm_info("guest dabt addr gva:%p, ipa:%p\n", get_gva(), get_ipa());
             vmm_info("guest need stage2 mmap here\n");
             break;
         default:
@@ -79,6 +79,23 @@ void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
 }
 
 void guest_entry(void) {
+        /* flush local TLB */
+    // asm volatile("dsb nshst\n\t"
+    //              "tlbi alle2\n\t"
+    //              "dsb nsh\n\t"
+    //              "isb\n\t" ::
+    //                      : "memory");
+    arm_flush_cache_range(0x09000000, 0x100);
+    *(unsigned int*)0x09000000 = 'G';
+    int v = 1;
+    while(1){
+    asm volatile("mov X3, %0"::"r"(v):"cc");
+    *(volatile uint64_t*)0x09000000 = '\n';
+    v++;
+        arm_flush_cache_range(0x09000000, 0x100);
+
+    }
+    // printf("GUEST\n");
     while(1);
 }
 
@@ -90,14 +107,57 @@ uint64_t get_default_hcr_flags(void)
 
 
 void switch_to_el1(void) {
-    // msr(sctlr_el1, 0);
+    msr(sctlr_el1, 0);
 
 
     // hcr_val &= ~1;//disable vmmu;
 
+    extern void *_guest_stack_end;
 
-    msr(elr_el1, guest_entry);
-    msr(sp_el1, 0);
+    msr(elr_el2, guest_entry);
+    msr(sp_el1, &_guest_stack_end);
+    msr(spsr_el1, 0);
+
+    //init Generic timer
+    // msr cnthctl_el2 , msr cntvoff_el2
+
+    /* init MPID/MPIDR */
+    uint64_t tmp = mrs(midr_el1);
+    msr(vpidr_el2, tmp);
+    tmp = mrs(mpidr_el1);
+    msr(vmpidr_el2, tmp);
+    vmm_info("vpidr:%x\n", tmp);
+
+    // disable co-processor traps
+#if 1
+    msr(cptr_el2, (3 << 12 | 0x3ff));
+    msr(hstr_el2, 0);
+    msr(cpacr_el1, (3 << 20)); /* Enable FP/SIMD at EL1 */
+
+    /*
+        SCTLR_EL1 init
+    */
+    uint64_t sctlr_val =
+            (SCTLR_EL1_RES1 | SCTLR_EL1_UCI_DIS | SCTLR_EL1_EE_LE |
+                    SCTLR_EL1_WXN_DIS | SCTLR_EL1_NTWE_DIS |
+                    SCTLR_EL1_NTWI_DIS | SCTLR_EL1_UCT_DIS | SCTLR_EL1_DZE_DIS |
+                    SCTLR_EL1_ICACHE_DIS | SCTLR_EL1_UMA_DIS |
+                    SCTLR_EL1_SED_EN | SCTLR_EL1_ITD_EN |
+                    SCTLR_EL1_CP15BEN_DIS | SCTLR_EL1_SA0_DIS |
+                    SCTLR_EL1_SA_DIS | SCTLR_EL1_DCACHE_DIS |
+                    SCTLR_EL1_ALIGN_DIS | SCTLR_EL1_MMU_DIS);
+    msr(sctlr_el1, sctlr_val);
+
+#endif
+    uint64_t vector_el2 = mrs(vbar_el2);
+    msr(vbar_el1, vector_el2);
+
+
+    tmp = (SPSR_EL_DEBUG_MASK | SPSR_EL_SERR_MASK |\
+			SPSR_EL_IRQ_MASK | SPSR_EL_FIQ_MASK |\
+			SPSR_EL_M_AARCH64 | SPSR_EL_M_EL1H);
+    vmm_debug("SPSR_EL2:%x\n", tmp);
+    *(unsigned int*)0x09000000 = 'W';
     msr(spsr_el2, 0x3c5);
     asm volatile("eret\t\n":::"memory");
     while(1);

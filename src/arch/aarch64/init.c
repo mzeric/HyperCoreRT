@@ -134,12 +134,14 @@ void cpu_init(void) {
     */
     // id = id > 5 ? 5 : id;
     vmm_debug("support %d physical address\n", id == 4 ? 44 : id == 5 ? 48 : -1);
-    uint64_t tcr_val = (TCR_RES1|TCR_SH0_IS|TCR_ORGN0_WBWA|TCR_IRGN0_WBWA|TCR_T0SZ(64-48));
+    uint64_t tcr_val = (TCR_RES1|TCR_SH0_IS|TCR_ORGN0_WBWA|TCR_IRGN0_WBWA|TCR_T0SZ(64-44));
     tcr_val |= (id<<16);
 
     /* such as: 0x8084_3510 */
     msr(tcr_el2, tcr_val);
+    vmm_info("TCR_EL2:%x\n", tcr_val);
     msr_sync(SCTLR_EL2, SCTLR_EL2_SET);
+
     /*
     * Ensure that any exceptions encountered at EL2
     * are handled using the EL2 stack pointer, rather
