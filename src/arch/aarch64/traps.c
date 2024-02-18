@@ -45,6 +45,58 @@ paddr_t get_ipa() {
     return ipa;
 }
 
+int do_stage2_data_abort_trap(struct cpu_user_regs *regs, const union esr esr) {
+    int fsc = esr.dabt.fsc;
+
+    switch (fsc) {
+    case 0 ... 3:
+        vmm_info("FSC: address size fault level:%d\n", fsc & FSC_LL_MASK);
+        break;
+    case FSC_FLT_TRANS ... FSC_FLT_TRANS + 3:
+        vmm_info("FSC: translation fault level:%d\n", fsc & FSC_LL_MASK);
+        break;
+    case FSC_FLT_ACCESS ... FSC_FLT_ACCESS + 3:
+        vmm_info("FSC: access flag fault level:%d\n", fsc & FSC_LL_MASK);
+        break;
+    case FSC_FLT_PERM ... FSC_FLT_PERM + 3:
+        vmm_info("FSC: permission fault level:%d\n", fsc & FSC_LL_MASK);
+        break;
+    case FSC_SEA:
+        vmm_info("FSC: Synchronous external abort\n");
+        break;
+    case FSC_SPE:
+        vmm_info("FSC: Synchronous parity or ECC error on memory access, "
+                 "not on translation table walk\n");
+        break;
+    case FSC_APE:
+        vmm_info("FSC:FSC_APE\n");
+        break;
+    case FSC_SEATT ... FSC_SEATT + 3:
+        vmm_info("FSC: Synchronous external abort, on translation table "
+                 "walk, level:%d\n",
+                fsc & FSC_LL_MASK);
+        break;
+    case FSC_SPETT ... FSC_SPETT + 3:
+        vmm_info("FSC: Synchronous parity or ECC error on memory access on "
+                 "translation table walk, level:%d\n",
+                fsc & FSC_LL_MASK);
+        break;
+
+    case FSC_AF:
+        vmm_info("FSC: Alignment fault\n");
+        break;
+    case FSC_TLB_FLT:
+        vmm_info("FSC: TLB conflict abort\n");
+        break;
+    case FSC_UNS_STOMIC:
+    case FSC_LKD:
+    case FSC_UNS_EXCL:
+    case FSC_CPR:
+    default:
+        vmm_info("unsupport fsc 0x%x\n", fsc);
+        break;
+    }
+}
 
 void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
 
@@ -70,6 +122,7 @@ void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
         case HSR_EC_DATA_ABORT_LOWER_EL:
             vmm_info("guest dabt addr gva:%p, ipa:%p\n", get_gva(), get_ipa());
             vmm_info("guest need stage2 mmap here\n");
+            do_stage2_data_abort_trap(regs, esr);
             break;
         default:
             vmm_info("unknown exception\n");
@@ -79,24 +132,28 @@ void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
 }
 
 void guest_entry(void) {
-        /* flush local TLB */
-    // asm volatile("dsb nshst\n\t"
-    //              "tlbi alle2\n\t"
-    //              "dsb nsh\n\t"
-    //              "isb\n\t" ::
-    //                      : "memory");
-    arm_flush_cache_range(0x09000000, 0x100);
-    *(unsigned int*)0x09000000 = 'G';
-    int v = 1;
-    while(1){
-    asm volatile("mov X3, %0"::"r"(v):"cc");
-    *(volatile uint64_t*)0x09000000 = '\n';
-    v++;
-        arm_flush_cache_range(0x09000000, 0x100);
+    /* flush local TLB */
+    asm volatile("dsb nshst\n\t"
+                 "dsb nsh\n\t"
+                 "isb\n\t" ::
+                         : "memory");
 
+    uint64_t uart_addr = 0x09000000;
+    *(volatile uint64_t*)uart_addr = 'H';
+    *(volatile uint64_t*)uart_addr = 'E';
+    *(volatile uint64_t*)uart_addr = 'L';
+    *(volatile uint64_t*)uart_addr = 'L';
+    *(volatile uint64_t*)uart_addr = 'O';
+
+    printf(" from GUEST\n");
+    printf("current EL:%d\n", current_el());
+
+    size_t v = 1;
+    while (1) {
+        asm volatile("mov X3, %0" ::"r"(v) : "cc");
+        v++;
     }
-    // printf("GUEST\n");
-    while(1);
+
 }
 
 uint64_t get_default_hcr_flags(void)
@@ -157,7 +214,6 @@ void switch_to_el1(void) {
 			SPSR_EL_IRQ_MASK | SPSR_EL_FIQ_MASK |\
 			SPSR_EL_M_AARCH64 | SPSR_EL_M_EL1H);
     vmm_debug("SPSR_EL2:%x\n", tmp);
-    *(unsigned int*)0x09000000 = 'W';
     msr(spsr_el2, 0x3c5);
     asm volatile("eret\t\n":::"memory");
     while(1);

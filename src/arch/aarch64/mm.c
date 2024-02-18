@@ -50,12 +50,17 @@ DEFINE_PAGE_TABLES(uart_fix_map, 1);
 
 DEFINE_PAGE_TABLE(stage2_L0);
 DEFINE_PAGE_TABLE(stage2_L1);
-// DEFINE_PAGE_TABLE(stage2_L1_b);
 DEFINE_PAGE_TABLE(stage2_L2);
 DEFINE_PAGE_TABLE(stage2_L2_b);
 DEFINE_PAGE_TABLES(stage2_L3, (8 << 20) / ARM_PT_LEVEL_SIZE(2));
-DEFINE_PAGE_TABLES(stage2_L3_b, (1 << 20) / ARM_PT_LEVEL_SIZE(2));
+DEFINE_PAGE_TABLES(stage2_L3_b, (8 << 20) / ARM_PT_LEVEL_SIZE(2));
 
+typedef struct page_table {
+    lpae_t entry[ARM_PT_LPAE_ENTRIES];
+}page_table_t;
+
+static page_table_t page_table_cache[1024];
+int g_page_table_cache_used = 0;
 
 uint64_t get_table_entry_idx(vaddr_t virt, uint8_t level) {
     uint64_t mask = (1UL << ARM_PT_LPAE_SHIFT) - 1;
@@ -73,16 +78,16 @@ void create_table_entry_from_paddr(uint64_t *ptbl, paddr_t next_tbl, paddr_t vir
     ptbl[entry_idx] = (next_tbl | PT_PT);
 }
 
-void build_p2m_table(lpae_t *table_current_level, vaddr_t next_tbl, vaddr_t virt, uint8_t level) {
+void build_p2m_table(lpae_t *table_current_level, vaddr_t next_tbl, vaddr_t virt, uint8_t level, int attr) {
     int idx = get_table_entry_idx(virt, level);
     paddr_t addr = vir_to_phy(next_tbl);
-    table_current_level[idx] = make_p2m_table_entry(addr);
+    table_current_level[idx] = make_p2m_table_entry(addr, attr);
     // vmm_debug("%p[%d] = %p[0x%x]\n", table_current_level, idx, addr, table_current_level[idx].bits);
 }
 
-void build_stage2_page_table(vaddr_t mem_start, size_t map_size, lpae_t *L0, lpae_t *L1, lpae_t *L2, lpae_t *L3) {
-    build_p2m_table(L0, L1, mem_start, 0);
-    build_p2m_table(L1, L2, mem_start, 1);
+void build_stage2_page_table(vaddr_t mem_start, size_t map_size, lpae_t *L0, lpae_t *L1, lpae_t *L2, lpae_t *L3, int attr) {
+    build_p2m_table(L0, L1, mem_start, 0, attr);
+    build_p2m_table(L1, L2, mem_start, 1, attr);
 
 
     int cnt = (8 << 20) / ARM_PT_LEVEL_SIZE(2);
@@ -91,12 +96,12 @@ void build_stage2_page_table(vaddr_t mem_start, size_t map_size, lpae_t *L0, lpa
     paddr_t val = vir_to_phy(L3);
     for (int i = 0; i < cnt; ++i) {
         /* setup L1(second) entrys */
-        build_p2m_table(L2, val, addr, 2);
+        build_p2m_table(L2, val, addr, 2, attr);
         val += PAGE_SIZE;
         addr += ARM_PT_LEVEL_SIZE(2);
     }
 
-    /* fill L3: first 2MN */
+    /* fill L3: only map first map_size */
     cnt = map_size >> PAGE_SHIFT;
 
     // paddr_t phy_start =            ((MEM_VIRT_START >> THIRD_SHIFT) << THIRD_SHIFT) | PT_MEM_L3;
@@ -104,7 +109,7 @@ void build_stage2_page_table(vaddr_t mem_start, size_t map_size, lpae_t *L0, lpa
     lpae_t* entry = L3;
     for (int i = 0; i < cnt; ++i) {
         // build_p2m_table(stage2_L3, phy_start, phy_start, 3);
-        lpae_t p = make_p2m_table_entry(phy_start);
+        lpae_t p = make_p2m_table_entry(phy_start, attr);
         entry[i] = p;
         phy_start += PAGE_SIZE;
     }
@@ -128,7 +133,6 @@ void create_uart_fix_map() {
     p[0] = uart_phy_addr | PT_MEM_L3;
 
 }
-
 
 /*
 {
@@ -177,215 +181,6 @@ void create_boot_page_tables(
     create_uart_fix_map();
 }
 
-lpae_t make_lpae_entry(mfn_t mfn, unsigned int attr)
-{
-    lpae_t e = (lpae_t) {
-        .pt = {
-            .valid = 1,           /* Mappings are present */
-            .table = 0,           /* Set to 1 for links and 4k maps */
-            .ai = attr,
-            .ns = 1,              /* Hyp mode is in the non-secure world */
-            .up = 1,              /* See below */
-            .ro = 0,              /* Assume read-write */
-            .af = 1,              /* No need for access tracking */
-            .ng = 1,              /* Makes TLB flushes easier */
-            .contig = 0,          /* Assume non-contiguous */
-            .xn = 1,              /* No need to execute outside .text */
-            .avail = 0,           /* Reference count for domheap mapping */
-        }};
-    /*
-     * For EL2 stage-1 page table, up (aka AP[1]) is RES1 as the translation
-     * regime applies to only one exception level (see D4.4.4 and G4.6.1
-     * in ARM DDI 0487B.a). If this changes, remember to update the
-     * hard-coded values in head.S too.
-     */
-
-    switch ( attr )
-    {
-    case MT_NORMAL_NC:
-        /*
-         * ARM ARM: Overlaying the shareability attribute (DDI
-         * 0406C.b B3-1376 to 1377)
-         *
-         * A memory region with a resultant memory type attribute of Normal,
-         * and a resultant cacheability attribute of Inner Non-cacheable,
-         * Outer Non-cacheable, must have a resultant shareability attribute
-         * of Outer Shareable, otherwise shareability is UNPREDICTABLE.
-         *
-         * On ARMv8 sharability is ignored and explicitly treated as Outer
-         * Shareable for Normal Inner Non_cacheable, Outer Non-cacheable.
-         */
-        e.pt.sh = LPAE_SH_OUTER;
-        break;
-    case MT_DEVICE_nGnRnE:
-    case MT_DEVICE_nGnRE:
-        /*
-         * Shareability is ignored for non-Normal memory, Outer is as
-         * good as anything.
-         *
-         * On ARMv8 sharability is ignored and explicitly treated as Outer
-         * Shareable for any device memory type.
-         */
-        e.pt.sh = LPAE_SH_OUTER;
-        break;
-    default:
-        e.pt.sh = LPAE_SH_INNER;  /* Xen mappings are SMP coherent */
-        break;
-    }
-
-    WARN_ON((mfn_to_maddr(mfn) & ~PADDR_MASK));
-
-    lpae_set_mfn(e, mfn);
-
-    return e;
-}
-
-/**********
- *
- * P2M
-*/
-
-
-static void p2m_set_permission(lpae_t *e, p2m_type_t t, p2m_access_t a)
-{
-    /* First apply type permissions */
-    switch ( t )
-    {
-    case p2m_ram_rw:
-        e->p2m.xn = 0;
-        e->p2m.write = 1;
-        break;
-
-    case p2m_ram_ro:
-        e->p2m.xn = 0;
-        e->p2m.write = 0;
-        break;
-
-    case p2m_iommu_map_rw:
-    case p2m_map_foreign_rw:
-    case p2m_grant_map_rw:
-    case p2m_mmio_direct_dev:
-    case p2m_mmio_direct_nc:
-    case p2m_mmio_direct_c:
-        e->p2m.xn = 1;
-        e->p2m.write = 1;
-        break;
-
-    case p2m_iommu_map_ro:
-    case p2m_map_foreign_ro:
-    case p2m_grant_map_ro:
-    case p2m_invalid:
-        e->p2m.xn = 1;
-        e->p2m.write = 0;
-        break;
-
-    case p2m_max_real_type:
-        // BUG();
-        break;
-    }
-
-    /* Then restrict with access permissions */
-    switch ( a )
-    {
-    case p2m_access_rwx:
-        break;
-    case p2m_access_wx:
-        e->p2m.read = 0;
-        break;
-    case p2m_access_rw:
-        e->p2m.xn = 1;
-        break;
-    case p2m_access_w:
-        e->p2m.read = 0;
-        e->p2m.xn = 1;
-        break;
-    case p2m_access_rx:
-    case p2m_access_rx2rw:
-        e->p2m.write = 0;
-        break;
-    case p2m_access_x:
-        e->p2m.write = 0;
-        e->p2m.read = 0;
-        break;
-    case p2m_access_r:
-        e->p2m.write = 0;
-        e->p2m.xn = 1;
-        break;
-    case p2m_access_n:
-    case p2m_access_n2rwx:
-        e->p2m.read = e->p2m.write = 0;
-        e->p2m.xn = 1;
-        break;
-    }
-}
-
-static lpae_t mfn_to_p2m_entry(mfn_t mfn, p2m_type_t t, p2m_access_t a)
-{
-    /*
-     * sh, xn and write bit will be defined in the following switches
-     * based on mattr and t.
-     */
-
-    lpae_t e = (lpae_t) {
-        .p2m.af = 1,
-        .p2m.read = 1,
-        .p2m.table = 1,
-        .p2m.valid = 1,
-        // .p2m.type = 1,
-        .p2m.sbz1 = 0,
-    };
-
-
-    // BUILD_BUG_ON(p2m_max_real_type > (1 << 4));
-
-    switch ( t )
-    {
-    case p2m_mmio_direct_dev:
-        e.p2m.mattr = MATTR_DEV;
-        e.p2m.sh = LPAE_SH_OUTER;
-        break;
-
-    case p2m_mmio_direct_c:
-        e.p2m.mattr = MATTR_MEM;
-        e.p2m.sh = LPAE_SH_OUTER;
-        break;
-
-    /*
-     * ARM ARM: Overlaying the shareability attribute (DDI
-     * 0406C.b B3-1376 to 1377)
-     *
-     * A memory region with a resultant memory type attribute of Normal,
-     * and a resultant cacheability attribute of Inner Non-cacheable,
-     * Outer Non-cacheable, must have a resultant shareability attribute
-     * of Outer Shareable, otherwise shareability is UNPREDICTABLE.
-     *
-     * On ARMv8 shareability is ignored and explicitly treated as Outer
-     * Shareable for Normal Inner Non_cacheable, Outer Non-cacheable.
-     * See the note for table D4-40, in page 1788 of the ARM DDI 0487A.j.
-     */
-    case p2m_mmio_direct_nc:
-        e.p2m.mattr = MATTR_MEM_NC;
-        e.p2m.sh = LPAE_SH_OUTER;
-        break;
-
-    default:
-        e.p2m.mattr = MATTR_MEM;
-        e.p2m.sh = LPAE_SH_INNER;
-    }
-
-    p2m_set_permission(&e, t, a);
-
-    // ASSERT(!(mfn_to_maddr(mfn) & ~PADDR_MASK));
-
-    lpae_set_mfn(e, mfn);
-
-    return e;
-}
-
-lpae_t make_p2m_table_entry(vaddr_t virt) {
-
-    return mfn_to_p2m_entry(virt >> PAGE_SHIFT, p2m_ram_rw, p2m_access_rwx);
-}
 
 void dump_stage2_table(int level) {
     vmm_info("summary: L0:%p, L1:%p, L2:%p, L3:%p\n", stage2_L0, stage2_L1, stage2_L2, stage2_L3);
@@ -432,10 +227,35 @@ int map_ipa_to_phys(lpae_t *ttbl, vaddr_t ipa, paddr_t phys) {
     return 0;
 }
 
+void create_uart_guest_map() {
+    paddr_t mem_start = 0x09000000;
+#if 1
+    int attr = p2m_ram_rw;
+    build_p2m_table(stage2_L0, stage2_L1, mem_start, 0, attr);
+    build_p2m_table(stage2_L1, stage2_L2_b, mem_start, 1, attr);
+    build_p2m_table(stage2_L2_b, stage2_L3_b, mem_start, 2, attr);
+
+    lpae_t *p = stage2_L3_b;
+
+    int idx = get_table_entry_idx(mem_start, 3);
+    vmm_info("idx:%d\n", idx);
+    // stage2_L2_b[72] = make_p2m_table_entry(stage2_L3_b, 0);
+    // stage2_L3_b[0] = make_p2m_table_entry(mem_start, 0);//
+    stage2_L3_b[0].bits = 0x09000000 | 0x7ff;
+    // p[idx] = make_p2m_table_entry(0x40200000, p2m_mmio_direct_dev);
+    *(volatile unsigned long*)0x40200000 = 0xbeaf;
+    vmm_info("XXX:%p, %p\n", stage2_L2_b[72].bits, stage2_L3_b);
+    vmm_info("uart index: %d %d %d %d\n", get_table_entry_idx(mem_start, 0),
+            get_table_entry_idx(mem_start, 1),
+            get_table_entry_idx(mem_start, 2),
+            get_table_entry_idx(mem_start, 3));
+#endif
+}
 
 void enable_p2m(lpae_t *table_root) {
-    build_stage2_page_table(MEM_VIRT_START, (8<<20), stage2_L0, stage2_L1, stage2_L2, stage2_L3);
-    build_stage2_page_table(0x09000000, PAGE_SIZE, stage2_L0, stage2_L1, stage2_L2_b, stage2_L3_b);
+    build_stage2_page_table(MEM_VIRT_START, (8<<20), stage2_L0, stage2_L1, stage2_L2, stage2_L3, p2m_ram_rw);
+
+    create_uart_guest_map();
 
     uint64_t val = VTCR_RES1|VTCR_SH0_IS|VTCR_ORGN0_WBWA|VTCR_IRGN0_WBWA;
     val |= VTCR_TG0_4K;
@@ -452,7 +272,7 @@ void enable_p2m(lpae_t *table_root) {
     uint64_t vttbr_val = (uint64_t)stage2_L0 & (~0xFFFUL);
     vttbr_val |= (0<<48);
 
-#define INIT_ZERO_ADDR
+// #define INIT_ZERO_ADDR
 #ifdef INIT_ZERO_ADDR
     /* init zero paging to capture NULL pointer issue */
     vmm_debug("stage_L2_b:%p\n", stage2_L2_b);

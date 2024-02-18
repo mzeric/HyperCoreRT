@@ -78,4 +78,4 @@ typedef enum {
 #define MATTR_MEM     0xf
 
 
-lpae_t make_p2m_table_entry(vaddr_t virt);
+lpae_t make_p2m_table_entry(vaddr_t virt, int attr);
