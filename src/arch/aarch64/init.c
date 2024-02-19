@@ -10,6 +10,7 @@
 #include "processor.h"
 #include "page.h"
 #include "mm.h"
+#include "execp.h"
 
 
 void init_mair(void) {
@@ -32,7 +33,7 @@ struct vmm_mmu {
 
 };
 
-static inline void cpu_mmu_clean_invalidate(void *va)
+static inline void cpu_mmu_clean_invalidate(vaddr_t va)
 {
 	asm volatile("dc civac, %0\t\n"
 		     "dsb sy\t\n"
@@ -40,7 +41,7 @@ static inline void cpu_mmu_clean_invalidate(void *va)
 		     : : "r" ((unsigned long)va));
 }
 
-void arm_inv_cache_range(const void *base, size_t size)
+void arm_inv_cache_range(const vaddr_t base, size_t size)
 {
     unsigned            dcache_lsize = 0;
     static unsigned int cache_info   = 0;
@@ -63,7 +64,7 @@ void arm_inv_cache_range(const void *base, size_t size)
     asm volatile("dsb sy; isb" : : : "memory");
 }
 
-void arm_flush_cache_range(const void *base, size_t size)
+void arm_flush_cache_range(const vaddr_t base, size_t size)
 {
     unsigned            dcache_lsize = 0;
     static unsigned int cache_info   = 0;
@@ -90,12 +91,6 @@ static inline void cpu_mmu_invalidate_range(vaddr_t start,
 					    vaddr_t size)
 {
 	arm_inv_cache_range(start, start + size);
-}
-
-void panic(char *msg) {
-    printf("panic.........\n");
-    exit(1);
-
 }
 
 void zero_bss(void) {
@@ -151,7 +146,7 @@ void cpu_init(void) {
 
 }
 
-void init_hyper_low_level(struct board_info *info) {
+int init_hyper_low_level(void *args) {
 
     uint64_t el;
 
@@ -188,4 +183,5 @@ void init_hyper_low_level(struct board_info *info) {
     vmm_info("current el: %d\n", current_el());
     vmm_info("here\n");
 
+    return 0;
 }

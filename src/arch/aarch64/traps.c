@@ -1,9 +1,11 @@
-#include <vmmio.h>
+#include "vmmio.h"
 #include "processor.h"
 #include "cpu_inline_asm.h"
 #include "execp.h"
 #include "page.h"
 #include "system.h"
+
+#include<stdio.h> /* just remove guest warning */
 
 /*
 
@@ -33,7 +35,7 @@ void do_bad_mode(struct cpu_user_regs *regs, int is_compat) {
     while(1);
 }
 
-uint64_t get_gva() { mrs(FAR_EL2); }
+uint64_t get_gva() { return mrs(FAR_EL2); }
 
 paddr_t get_ipa() {
     vaddr_t gva = mrs(FAR_EL2);
@@ -96,6 +98,9 @@ int do_stage2_data_abort_trap(struct cpu_user_regs *regs, const union esr esr) {
         vmm_info("unsupport fsc 0x%x\n", fsc);
         break;
     }
+
+
+    return 0;
 }
 
 void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
@@ -104,8 +109,8 @@ void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
         panic("Not support AArch32 Mode\n");
     }
     uint64_t elr = mrs(elr_el1); /* elr_el1 != elr_el2 */
-    uint64_t elr2 = mrs(elr_el2);
-    uint64_t spsr_el1 = mrs(spsr_el1);
+    // uint64_t elr2 = mrs(elr_el2);
+    // uint64_t spsr_el1 = mrs(spsr_el1);
 
     vmm_debug("GUEST excep spsr:%x, elr:%x\n", regs->cpsr, elr);
 
@@ -129,6 +134,12 @@ void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
 
     }
     while(1);
+}
+
+void panic(char *msg) {
+    printf("panic.........\n");
+    vmm_exit(1);
+
 }
 
 void guest_entry(void) {
@@ -161,7 +172,6 @@ uint64_t get_default_hcr_flags(void)
     return  (HCR_PTW|HCR_BSU_INNER|HCR_AMO|HCR_IMO|HCR_FMO|HCR_VM|
              HCR_TID3|HCR_TSC|HCR_TAC|HCR_SWIO|HCR_TIDCP|HCR_FB|HCR_TSW);
 }
-
 
 void switch_to_el1(void) {
     msr(sctlr_el1, 0);
@@ -220,10 +230,11 @@ void switch_to_el1(void) {
 }
 
 void do_hyper_sync(struct cpu_user_regs *regs, int magic) {
-	uint64_t esr = mrs(esr_el2);
-	uint64_t far = mrs(far_el2);
-	uint64_t elr = mrs(elr_el2);
-    vmm_info("spsr: 0x%x, esr: %x, far:%x, elr:%x\n", regs->cpsr, esr, far, regs->lr);
+    uint64_t esr = mrs(esr_el2);
+    uint64_t far = mrs(far_el2);
+    uint64_t elr = mrs(elr_el2);
+    vmm_info("spsr: 0x%x, esr: %x, far:%x,elr:%x, lr:%x\n", regs->cpsr, esr,
+            far, elr, regs->lr);
 
     int ec = esr >> 26;
     vmm_info("Exception details: EC:0x%x, ISS:0x%x\n", ec, esr & 0x1ffffff);

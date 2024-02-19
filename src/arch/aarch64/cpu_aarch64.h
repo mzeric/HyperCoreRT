@@ -258,7 +258,7 @@
 #define HCR_VM          (_AC(1,UL)<<0) /* Virtual MMU Enable */
 
 /* TCR: Stage 1 Translation Control */
-
+/* See Arm® Architecture Reference Manual, ARM DDI 0487E.a */
 #define TCR_T0SZ_SHIFT  (0)
 #define TCR_T1SZ_SHIFT  (16)
 #define TCR_T0SZ(x)     ((x)<<TCR_T0SZ_SHIFT)
@@ -487,8 +487,6 @@
 
 /* HPFAR_EL2: Hypervisor IPA Fault Address Register */
 #define HPFAR_MASK	GENMASK(39, 4)
-
-#define HPFAR_MASK	GENMASK(31, 4)
 
 
 /* Time counter hypervisor control register */

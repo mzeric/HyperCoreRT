@@ -1,4 +1,5 @@
 #pragma once
+#include "vmmio.h"
 
 #define pfn_to_paddr(pfn) ((paddr_t)(pfn) << PAGE_SHIFT)
 #define paddr_to_pfn(pa)  ((unsigned long)((pa) >> PAGE_SHIFT))
@@ -77,6 +78,23 @@ typedef enum {
 #define MATTR_MEM_NC  0x5
 #define MATTR_MEM     0xf
 
+#define MB(x) ((x##u) << 20)
+
+void build_hyper_table(lpae_t *table_current_level, vaddr_t next_tbl, vaddr_t virt, uint8_t level, int attr);
+
+int __build_hyper_two_level_page_table(vaddr_t virt_start, paddr_t phys_start, uint64_t mem_size,
+        int attr, lpae_t* table_L0, lpae_t* table_L1, lpae_t* table_L2);
+
+int __build_hyper_three_level_page_table(vaddr_t virt_start, paddr_t phys_start, uint64_t map_size,
+        int attr, lpae_t* table_L0, lpae_t* table_L1, lpae_t* table_L2,
+        lpae_t* table_L3);
+
+int build_stage2_page_table(vaddr_t virt_start, paddr_t phys_start,
+        uint64_t map_size, lpae_t* L0, lpae_t* L1, lpae_t* L2, lpae_t* L3,
+        int attr);
 
 lpae_t make_p2m_table_entry(vaddr_t virt, int attr);
 lpae_t make_lpae_entry(mfn_t mfn, unsigned int attr);
+void init_mm(void);
+
+paddr_t vir_to_phy(vaddr_t v);

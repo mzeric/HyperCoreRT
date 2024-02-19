@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include "vmmio.h"
 
+extern int init_hyper_low_level(void*);
+
 const char* magic = "HyperCoreRT";
 
 struct test_init_fini{
@@ -12,7 +14,6 @@ struct test_init_fini{
 int c_main(void) {
     vmm_printf("----- %s booting -------\n", magic);
 
-    vmm_devemu_emulate_read();
     init_hyper_low_level(NULL);
 
     vmm_printf("HyperCoreRT finished\n");

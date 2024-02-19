@@ -39,3 +39,8 @@ union esr {
         unsigned long ec:6;    /* Exception Class */
     } dabt; /* HSR_EC_DATA_ABORT_* */
 };
+
+uint64_t get_default_hcr_flags(void);
+void panic(char* msg);
+uint64_t get_default_hcr_flags(void);
+void switch_to_el1(void);
