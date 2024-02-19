@@ -79,3 +79,4 @@ typedef enum {
 
 
 lpae_t make_p2m_table_entry(vaddr_t virt, int attr);
+lpae_t make_lpae_entry(mfn_t mfn, unsigned int attr);

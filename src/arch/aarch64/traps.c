@@ -228,8 +228,6 @@ void do_hyper_sync(struct cpu_user_regs *regs, int magic) {
     int ec = esr >> 26;
     vmm_info("Exception details: EC:0x%x, ISS:0x%x\n", ec, esr & 0x1ffffff);
 
-    // switch_to_el1();
-
     vmm_info("spsr:%x, hcr_el2:%x\n", regs->cpsr, mrs(hcr_el2));
     panic("panic");
 }

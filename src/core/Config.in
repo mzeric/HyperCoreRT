@@ -10,4 +10,8 @@ config CONFIG_INT_STACK_SIZE
 config CONFIG_ENTRY_ADDR
 	hex "entry addr"
 	default 0x40000000
+
+config CONFIG_PHY_MEM_SIZE
+	hex "physical memory size"
+	default 0x800000
 endmenu

@@ -70,7 +70,7 @@ SECTIONS{
   .guest_test_stack :
   {
     PROVIDE(_guest_stack = .);
-    . += 0x1000;
+    . += 0x10000;
     PROVIDE(_guest_stack_end = .);
   }
   /DISCARD/ :

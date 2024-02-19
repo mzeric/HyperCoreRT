@@ -248,6 +248,10 @@ hyp_sync:
 
                /* Inherit interrupts */
         mrs     x0, SPSR_el2
+        mrs     x0, esr_el2
+        mrs     x1, far_el2
+        mrs     x2, hpfar_el2
+        b .
         and     x0, x0, #(PSR_DBG_MASK | PSR_ABT_MASK | PSR_IRQ_MASK | PSR_FIQ_MASK)
         msr     daif, x0
 
@@ -256,7 +260,9 @@ hyp_sync:
         excep_return
 hyp_irq:
 hyp_error:
+                excep_entry
 		call_excep do_bad_mode, #1
+                excep_return
 
 guest_sync:
 guest_irq:

@@ -13,7 +13,7 @@ lpae_t make_lpae_entry(mfn_t mfn, unsigned int attr)
     lpae_t e = (lpae_t) {
         .pt = {
             .valid = 1,           /* Mappings are present */
-            .table = 0,           /* Set to 1 for links and 4k maps */
+            .table = 1,           /* Set to 1 for links and 4k maps */
             .ai = attr,
             .ns = 1,              /* Hyp mode is in the non-secure world */
             .up = 1,              /* See below */
@@ -21,7 +21,7 @@ lpae_t make_lpae_entry(mfn_t mfn, unsigned int attr)
             .af = 1,              /* No need for access tracking */
             .ng = 1,              /* Makes TLB flushes easier */
             .contig = 0,          /* Assume non-contiguous */
-            .xn = 1,              /* No need to execute outside .text */
+            .xn = 0,              /* No need to execute outside .text */
             .avail = 0,           /* Reference count for domheap mapping */
         }};
     /*

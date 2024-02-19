@@ -41,10 +41,12 @@ Translation table lookup with 4KB pages:
 #define PT_DEV    0xe71 /* nG=1 AF=1 SH=10 AP=01 NS=1 ATTR=100 T=0 P=1 */
 #define PT_DEV_L3 0xe73 /* nG=1 AF=1 SH=10 AP=01 NS=1 ATTR=100 T=1 P=1 */
 
+#define BOOT_MAP_SIZE (16 << 20)
+
 DEFINE_PAGE_TABLE(boot_pgtable);
 DEFINE_PAGE_TABLE(boot_first);
 DEFINE_PAGE_TABLE(boot_second);
-DEFINE_PAGE_TABLES(boot_third, (8 << 20) / ARM_PT_LEVEL_SIZE(2));
+DEFINE_PAGE_TABLES(boot_third, BOOT_MAP_SIZE / ARM_PT_LEVEL_SIZE(2));
 
 DEFINE_PAGE_TABLES(uart_fix_map, 1);
 
@@ -52,15 +54,26 @@ DEFINE_PAGE_TABLE(stage2_L0);
 DEFINE_PAGE_TABLE(stage2_L1);
 DEFINE_PAGE_TABLE(stage2_L2);
 DEFINE_PAGE_TABLE(stage2_L2_b);
-DEFINE_PAGE_TABLES(stage2_L3, (8 << 20) / ARM_PT_LEVEL_SIZE(2));
-DEFINE_PAGE_TABLES(stage2_L3_b, (8 << 20) / ARM_PT_LEVEL_SIZE(2));
+DEFINE_PAGE_TABLES(stage2_L3, BOOT_MAP_SIZE / ARM_PT_LEVEL_SIZE(2));
+DEFINE_PAGE_TABLES(stage2_L3_b, 1);
 
-typedef struct page_table {
-    lpae_t entry[ARM_PT_LPAE_ENTRIES];
-}page_table_t;
+#define PAGE_CNT (CONFIG_PHY_MEM_SIZE>>PAGE_SHIFT)
 
-static page_table_t page_table_cache[1024];
-int g_page_table_cache_used = 0;
+#define DIRECT_MAPPING_VIRT_START (0xF00UL << 32) /* 0xF00_0000_0000 */
+#define DIRECT_MAPPING_VIRT_END (0xFF0UL << 32) /* 0xFF0_0000_0000 */
+
+#define PHYS_OFFSET CONFIG_ENTRY_ADDR
+#define VIRT_OFFSET DIRECT_MAPPING_VIRT_END
+
+#define VIRT_TO_PHYS(addr) (((addr)-VIRT_OFFSET) + PHYS_OFFSET)
+#if 1
+DEFINE_PAGE_TABLE(stage2_direct_mapping_L0);
+DEFINE_PAGE_TABLES(stage2_direct_mapping_L1, (CONFIG_PHY_MEM_SIZE)/ ARM_PT_LEVEL_SIZE(1));
+DEFINE_PAGE_TABLES(stage2_direct_mapping_L2, (CONFIG_PHY_MEM_SIZE)/ ARM_PT_LEVEL_SIZE(2));
+DEFINE_PAGE_TABLES(stage2_direct_mapping_L3, BOOT_MAP_SIZE / ARM_PT_LEVEL_SIZE(2));
+DEFINE_PAGE_TABLES(stage2_fix_mapping_L2, 512);
+#endif
+
 
 uint64_t get_table_entry_idx(vaddr_t virt, uint8_t level) {
     uint64_t mask = (1UL << ARM_PT_LPAE_SHIFT) - 1;
@@ -82,9 +95,95 @@ void build_p2m_table(lpae_t *table_current_level, vaddr_t next_tbl, vaddr_t virt
     int idx = get_table_entry_idx(virt, level);
     paddr_t addr = vir_to_phy(next_tbl);
     table_current_level[idx] = make_p2m_table_entry(addr, attr);
-    // vmm_debug("%p[%d] = %p[0x%x]\n", table_current_level, idx, addr, table_current_level[idx].bits);
 }
 
+void build_hyper_table(lpae_t *table_current_level, vaddr_t next_tbl, vaddr_t virt, uint8_t level, int attr) {
+    int idx = get_table_entry_idx(virt, level);
+    paddr_t addr = vir_to_phy(next_tbl);
+    table_current_level[idx] = make_lpae_entry(addr>>12, attr);
+    lpae_t *p = &table_current_level[idx];
+}
+
+/* 2MB one slot */
+void fix_map(vaddr_t virt, paddr_t phys, int slot, int attr) {
+    build_p2m_table(stage2_direct_mapping_L0, stage2_direct_mapping_L1, virt, 0, attr);
+    build_p2m_table(stage2_direct_mapping_L1, &stage2_fix_mapping_L2[slot], virt, 1, attr);
+
+    lpae_t e = make_lpae_entry(phys >> 12, attr);
+    e.pt.table = 0;
+    lpae_t *entry_start = &stage2_fix_mapping_L2[slot];
+    int idx = get_table_entry_idx(virt, 2);
+    entry_start[get_table_entry_idx(virt, 2)] = e;
+    // vmm_info("------ %p %p = %p\n", stage2_fix_mapping_L2, &entry_start[72], e.bits);
+}
+
+void fix_unmap(int slot) {
+    stage2_fix_mapping_L2[slot].bits = 0;
+}
+
+#if 1
+void build_hyper_page_table(vaddr_t mem_start, vaddr_t mem_end, int attr) {
+    lpae_t *pte;
+    vaddr_t addr;
+    vaddr_t uart_fix = 0x09000000;
+
+    vmm_info("%p, %p, %p\n", stage2_direct_mapping_L0, stage2_direct_mapping_L1, stage2_direct_mapping_L2);
+    build_hyper_table(stage2_direct_mapping_L0, stage2_direct_mapping_L1, mem_start, 0, attr);
+    build_hyper_table(stage2_direct_mapping_L1, stage2_direct_mapping_L2, mem_start, 1, attr);
+
+    addr = mem_start;
+    pte = stage2_direct_mapping_L2;
+
+
+// #define USE_L3
+#ifdef USE_L3
+
+    paddr_t next_tbl = (uint64_t)stage2_direct_mapping_L3;
+#else
+    paddr_t next_tbl = addr;
+#endif
+    /* fill L2 */
+    int idx = 0;
+    do {
+        int idx = get_table_entry_idx(addr, 2);
+        paddr_t phys_addr = vir_to_phy(addr);
+        lpae_t e = make_lpae_entry(next_tbl >> 12, MT_NORMAL);
+#ifndef USE_L3
+        e.pt.table = 0;
+#endif
+        e.pt.xn = 0;
+        pte[idx++] = e;
+    } while (
+#ifdef USE_L3
+        next_tbl += PAGE_SIZE,
+#else
+            next_tbl += 2 << 20,
+#endif
+         addr += (2 << 20), addr < mem_end);
+
+
+#ifndef USE_L3
+    goto uart;
+#endif
+    /* fill L3 */
+    addr = (mem_start >> THIRD_SHIFT) << THIRD_SHIFT;
+    lpae_t* entry = stage2_direct_mapping_L3;
+
+    vaddr_t end = min(mem_end, mem_start + (8 << 20));
+
+    do {
+        uint64_t old_pte = entry->bits;
+        *entry = make_lpae_entry(addr >> 12, MT_NORMAL);
+        entry->pt.xn = 0;
+    } while (entry++, addr += PAGE_SIZE, addr < mem_end);
+
+    /* for the uart */
+
+uart:
+    fix_map(uart_fix, uart_fix, 0, MT_NORMAL);
+
+}
+#endif
 void build_stage2_page_table(vaddr_t mem_start, size_t map_size, lpae_t *L0, lpae_t *L1, lpae_t *L2, lpae_t *L3, int attr) {
     build_p2m_table(L0, L1, mem_start, 0, attr);
     build_p2m_table(L1, L2, mem_start, 1, attr);
@@ -145,22 +244,44 @@ void create_uart_fix_map() {
 */
 void create_boot_page_tables(
         vaddr_t virt_addr, paddr_t phys_addr, size_t map_size) {
-
+#if 0
     create_table_entry(boot_pgtable, boot_first, virt_addr, 0);
     create_table_entry(boot_first, boot_second, virt_addr, 1);
+#else
+    build_hyper_table(boot_pgtable, boot_first, virt_addr, 0, MT_NORMAL);
+    build_hyper_table(boot_first, boot_second, virt_addr, 1, MT_NORMAL);
 
+#endif
     int cnt = (8 << 20) / ARM_PT_LEVEL_SIZE(2);
     vmm_info("debug:%x, %d\n", ARM_PT_LEVEL_SIZE(2), cnt);
     vaddr_t addr = virt_addr;
     paddr_t val = vir_to_phy(boot_third);
+
+#if 0
+    val = virt_addr;
+#endif
     // cnt = 1;
     for (int i = 0; i < cnt; ++i) {
         /* setup L2(second) entrys */
+#if 0
         create_table_entry_from_paddr(boot_second, val, addr, 2);
+#else
+        {
+            int idx = get_table_entry_idx(addr, 2);
+            paddr_t addr_tbl = vir_to_phy(val);
+            boot_second[idx] = make_lpae_entry(addr_tbl >> 12, MT_NORMAL);
+            lpae_t* p = &boot_second[idx];
+            vmm_info("xxxxxxxxxxxx %p %p, %x, %x\n", p, addr_tbl, p->bits, val, ARM_PT_LEVEL_SIZE(2));
+            p->pt.table = 1;
+        }
+//        build_hyper_table(boot_second, val, addr, 2, MT_NORMAL);
+#endif
         val += PAGE_SIZE;
+        // val += ARM_PT_LEVEL_SIZE(2);
         addr += ARM_PT_LEVEL_SIZE(2);
     }
 
+    // goto uart;
     int page_cnt = (map_size >> PAGE_SHIFT);
 
     paddr_t text_load_start = phys_addr;
@@ -177,7 +298,7 @@ void create_boot_page_tables(
         phy_addr += PAGE_SIZE;
     }
     vmm_debug("set done\n");
-
+uart:
     create_uart_fix_map();
 }
 
@@ -253,6 +374,7 @@ void create_uart_guest_map() {
 }
 
 void enable_p2m(lpae_t *table_root) {
+
     build_stage2_page_table(MEM_VIRT_START, (8<<20), stage2_L0, stage2_L1, stage2_L2, stage2_L3, p2m_ram_rw);
 
     create_uart_guest_map();
@@ -264,10 +386,7 @@ void enable_p2m(lpae_t *table_root) {
 
     vmm_info("VTCR_EL2:%x\n", val);
     msr_sync(vtcr_el2, val);
-    void *ptr = malloc(4000);
-    void *ptr2 = memalign(0x1000, 0x1000);
-    vmm_info("ptr:%p, ptr2:%p\n", ptr, ptr2);
-    free(ptr);free(ptr2);
+
 
     uint64_t vttbr_val = (uint64_t)stage2_L0 & (~0xFFFUL);
     vttbr_val |= (0<<48);
@@ -292,6 +411,7 @@ void enable_p2m(lpae_t *table_root) {
     stage2_L3_b[0].bits = 0x40100000|0x7ff;
     vmm_info("%x\n", stage2_L1[1].bits);
 #endif
+
     dump_stage2_table(0);
     // vttbr_val = &enable_p2m;
     msr_sync(VTTBR_EL2, vttbr_val);
@@ -300,13 +420,14 @@ void enable_p2m(lpae_t *table_root) {
 
 void enable_mmu(void* table) {
     vmm_info("Enable paging\n");
+#if 0
     /* flush local TLB */
     asm volatile("dsb nshst\n\t"
                  "tlbi alle2\n\t"
                  "dsb nsh\n\t"
                  "isb\n\t" ::
                          : "memory");
-
+#endif
     msr_sync(TTBR0_EL2, table);
 
     uint64_t val = mrs(SCTLR_EL2);
@@ -330,7 +451,7 @@ void init_mm(void) {
     // MUST aligned by PAGE_SIZE
     map_size = (map_size + PAGE_SIZE - 1 ) & PAGE_MASK;
 
-    create_boot_page_tables(MEM_VIRT_START, MEM_VIRT_START, map_size);
+    // create_boot_page_tables(MEM_VIRT_START, MEM_VIRT_START, map_size);
 
     asm volatile("msr sctlr_el1, xzr");
 
@@ -344,8 +465,10 @@ void init_mm(void) {
     // uint64_t
     enable_p2m(stage2_L0);
 
+    build_hyper_page_table(MEM_VIRT_START, MEM_VIRT_START + (16<<20), MT_NORMAL);
 
 
-    enable_mmu(boot_pgtable);
+    enable_mmu(stage2_direct_mapping_L0);
+    // enable_mmu(boot_pgtable);
 
 }
