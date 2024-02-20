@@ -21,9 +21,15 @@
         printf("[Error][%s:%d]" fmt, __FUNCTION__, __LINE__, ##arg);           \
     } while (0)
 
-#define vmm_printf(fmt, arg...)                                                \
-    do {                                                                       \
-        printf(fmt , ##arg);                                               \
+#define vmm_fatal(fmt, arg...)                                                                     \
+    do {                                                                                           \
+        printf("[Fatal][%s:%d]" fmt, __FUNCTION__, __LINE__, ##arg);                               \
+        panic(".....\n");                                                                          \
+    } while (0)
+
+#define vmm_printf(fmt, arg...)                                                                    \
+    do {                                                                                           \
+        printf(fmt, ##arg);                                                                        \
     } while (0)
 
 typedef struct {

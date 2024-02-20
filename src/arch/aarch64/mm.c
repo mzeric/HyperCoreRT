@@ -79,8 +79,8 @@ DEFINE_PAGE_TABLES(stage2_fix_mapping_L2, 512);
 /* 2MB one slot */
 void __fix_map(vaddr_t virt, paddr_t phys, int slot, int attr, lpae_t *table_L0, lpae_t *table_L1, lpae_t *fix) {
 
-    build_p2m_table(table_L0, (vaddr_t)table_L1, virt, 0, attr);
-    build_p2m_table(table_L1, (vaddr_t)&fix[slot], virt, 1, attr);
+    build_s2_table(table_L0, (vaddr_t)table_L1, virt, 0, attr);
+    build_s2_table(table_L1, (vaddr_t)&fix[slot], virt, 1, attr);
 
     lpae_t e = make_lpae_entry(phys >> 12, attr);
     e.pt.table = 0;
@@ -148,9 +148,9 @@ void create_uart_guest_map() {
     paddr_t mem_start = 0x09000000;
 #if 1
     int attr = p2m_ram_rw;
-    build_p2m_table(stage2_L0, (vaddr_t)stage2_L1, mem_start, 0, attr);
-    build_p2m_table(stage2_L1, (vaddr_t)stage2_L2_b, mem_start, 1, attr);
-    build_p2m_table(stage2_L2_b, (vaddr_t)stage2_L3_b, mem_start, 2, attr);
+    build_s2_table(stage2_L0, (vaddr_t)stage2_L1, mem_start, 0, attr);
+    build_s2_table(stage2_L1, (vaddr_t)stage2_L2_b, mem_start, 1, attr);
+    build_s2_table(stage2_L2_b, (vaddr_t)stage2_L3_b, mem_start, 2, attr);
 
     int idx = pte_offset(mem_start, 3);
     // stage2_L2_b[72] = make_p2m_table_entry(stage2_L3_b, 0);
@@ -173,12 +173,12 @@ void enable_stage2_traslation(lpae_t *table_root) {
 
     create_uart_guest_map();
 
+    int pa_bits = get_phys_bits(); /* max phys addr bits only support 48bits for now */
     uint64_t val = VTCR_RES1|VTCR_SH0_IS|VTCR_ORGN0_WBWA|VTCR_IRGN0_WBWA;
     val |= VTCR_TG0_4K;
-    val |= VTCR_PS(4) |VTCR_T0SZ(64-44);
-    val |= VTCR_SL0(2);
+    val |= VTCR_PS(4) | VTCR_T0SZ(64 - pa_bits);
+    val |= VTCR_SL0(2); /* init lookup level = 0 */
 
-    vmm_info("VTCR_EL2:%x\n", val);
     msr_sync(vtcr_el2, val);
 
 
@@ -206,8 +206,7 @@ void enable_stage2_traslation(lpae_t *table_root) {
     vmm_info("%x\n", stage2_L1[1].bits);
 #endif
 
-    dump_stage2_table(0);
-    // vttbr_val = &enable_p2m;
+    // dump_stage2_table(0);
     msr_sync(VTTBR_EL2, vttbr_val);
 }
 

@@ -2,7 +2,6 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
-
 cc_library(
     name = "aarch64_as",
     srcs = glob([
@@ -10,11 +9,11 @@ cc_library(
         "src/arch/aarch64/**/*.h",
     ]),
     hdrs = glob(["include/**/*.h"]),
-    includes = ["include/"],
     copts = [
         "-D__ASSEMBLY__",
         "-Wall",
     ],
+    includes = ["include/"],
     alwayslink = True,
 )
 
@@ -26,8 +25,7 @@ cc_library(
                 "src/arch/aarch64/**/*.c",
                 # "src/arch/aarch64/**/*.S",
                 "src/arch/aarch64/**/*.h",
-
-            ]
+            ],
         ),
         "@platforms//cpu:riscv64": glob(
             [
@@ -45,6 +43,8 @@ cc_library(
     includes = ["include/"],
     deps = [
         ":aarch64_as",
+        "@libfdt",
+
     ],
     alwayslink = True,
 )
@@ -101,11 +101,15 @@ genrule(
 
 cc_binary(
     name = "hyper-elf",
+
     linkopts = [
         "-nostdlib",
         "-nostartfiles",
         "-nodefaultlibs",
-    ] + ["-Wl,-T$(location :linker.lds)", "-Wl,--build-id=none"],
+    ] + [
+        "-Wl,-T$(location :linker.lds)",
+        "-Wl,--build-id=none",
+    ],
     deps = [
         ":start_head",
         ":hyper-core",
@@ -118,8 +122,32 @@ genrule(
     name = "bin",
     srcs = [":hyper-elf"],
     outs = ["core.bin"],
+    # tools = [":dtb"],
     cmd = "$(OBJCOPY) -O binary $(location :hyper-elf) $@",
     toolchains = ["@bazel_tools//tools/cpp:current_cc_toolchain"],
+)
+
+genrule(
+    name = "dtb",
+    srcs = ["hyper.dts"],
+    outs = ["hyper.dtb"],
+    cmd = "dtc -O dtb $(location hyper.dts) > $@",
+)
+
+genrule(
+    name = "dtb2",
+    srcs = ["hyper.dts"],
+    outs = ["hyper2.dtb"],
+    cmd = "dtc -O dtb $(location hyper.dts) > $@",
+)
+
+filegroup(
+    name = "hyper",
+    srcs = [
+        ":bin",
+        ":dtb",
+        ":hyper-elf",
+    ],
 )
 
 config_setting(

@@ -4,6 +4,7 @@ module(
 )
 
 bazel_dep(name = "platforms", version = "0.0.6")
+bazel_dep(name = "libfdt", version = "0.0.1")
 
 #bazel_dep(name = "linaro_toolchain", version = "7.5")
 

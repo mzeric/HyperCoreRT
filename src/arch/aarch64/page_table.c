@@ -22,7 +22,7 @@ uint64_t pte_offset(vaddr_t virt, uint8_t level) {
     return val;
 }
 
-void build_p2m_table(lpae_t *cur_table, vaddr_t next_table, vaddr_t virt, uint8_t level, int attr) {
+void build_s2_table(lpae_t *cur_table, vaddr_t next_table, vaddr_t virt, uint8_t level, int attr) {
     int idx = pte_offset(virt, level);
     paddr_t addr = vir_to_phy(next_table);
     cur_table[idx] = make_p2m_table_entry(addr, attr);
@@ -105,8 +105,8 @@ int __build_hyper_three_level_page_table(vaddr_t virt_start, paddr_t phys_start,
 int build_stage2_page_table(vaddr_t virt_start, paddr_t phys_start,
         uint64_t map_size, lpae_t* table_L0, lpae_t* table_L1, lpae_t* table_L2,
         lpae_t* table_L3, int attr) {
-    build_p2m_table(table_L0, (vaddr_t)table_L1, virt_start, 0, attr);
-    build_p2m_table(table_L1, (vaddr_t)table_L2, virt_start, 1, attr);
+    build_s2_table(table_L0, (vaddr_t)table_L1, virt_start, 0, attr);
+    build_s2_table(table_L1, (vaddr_t)table_L2, virt_start, 1, attr);
 
 
     int cnt = map_size / ARM_PT_LEVEL_SIZE(2);
@@ -115,7 +115,7 @@ int build_stage2_page_table(vaddr_t virt_start, paddr_t phys_start,
     paddr_t val = vir_to_phy((vaddr_t)table_L3);
     for (int i = 0; i < cnt; ++i) {
         /* setup L1(second) entrys */
-        build_p2m_table(table_L2, val, addr, 2, attr);
+        build_s2_table(table_L2, val, addr, 2, attr);
         val += PAGE_SIZE;
         addr += ARM_PT_LEVEL_SIZE(2);
     }

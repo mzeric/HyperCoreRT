@@ -1,0 +1,67 @@
+/dts-v1/;
+
+/ {
+    compatible = "hypervisor,platform";
+    #address-cells = <0x2>;
+    #size-cells = <0x2>;
+    //interrupt-parent = <&gic>;
+
+    chosen {
+        bootargs = "console=ttyAMA0,115200 earlycon=pl011,0x09000000";
+        stdout-path = &uart0;
+    };
+
+    cpus {
+        #address-cells = <0x2>;
+        #size-cells = <0x0>;
+
+        cpu@0 {
+            device_type = "cpu";
+            compatible = "arm,armv8";
+            reg = <0x0 0x000>;
+            enable-method = "spin-table";
+            cpu-release-addr = <0xa 0x31040000>;
+        };
+        cpu@1 {
+            device_type = "cpu";
+            compatible = "arm,armv8";
+            reg = <0x0 0x100>;
+            enable-method = "spin-table";
+            cpu-release-addr = <0xa 0x31040000>;
+        };
+    };
+
+    memory@0 {
+        device_type = "memory";
+        // #address-cells = <0x4>;
+        reg = <0x0 0x40000000 0x1 0x0>; // 4G physical memory
+    };
+
+    reserved-memory {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+        reserved: device_memory@831000000 {
+        no-map;
+            reg = <0xb 0x00000000 0x1 0x00000000>;
+
+        };
+    };
+
+
+
+    refclk200: refclk200mhz {
+        #clock-cells = <0>;
+        compatible = "fixed-clock";
+        clock-frequency = <0xbebc200>; //200MHz
+    };
+
+    uart0: uart@22030000 {
+        compatible = "arm,pl011", "arm,primecell";
+        clock-names = "uartclk", "apb_pclk";
+        clocks = <&refclk200 &refclk200>;
+        interrupts = <0 26 4>;
+        reg = <0x0 0x09000000 0x0 0x1000>;
+    };
+
+};

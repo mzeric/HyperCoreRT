@@ -98,3 +98,4 @@ lpae_t make_lpae_entry(mfn_t mfn, unsigned int attr);
 void init_mm(void);
 
 paddr_t vir_to_phy(vaddr_t v);
+int get_phys_bits();
