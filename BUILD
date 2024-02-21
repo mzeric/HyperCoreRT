@@ -65,8 +65,8 @@ cc_library(
 cc_library(
     name = "hyper-core",
     srcs = glob(
-        ["src/core/**/*.c"],
-        ["src/core/**/*.h"],
+        ["src/core/**/*.c",
+        "src/core/**/*.h"],
     ) + ["src/main.c"],
     hdrs = glob(["include/**/*.h"]),
     copts = [

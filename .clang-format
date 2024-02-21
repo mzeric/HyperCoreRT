@@ -3,8 +3,7 @@ Language:        Cpp
 BasedOnStyle:  LLVM
 IndentWidth: 4
 ColumnLimit: 100
-PointerAlignment: Left
-ContinuationIndentWidth: 8
+ContinuationIndentWidth: 4
 SortIncludes: false
 
 AlignAfterOpenBracket: Align
@@ -14,4 +13,24 @@ AlignConsecutiveMacros: true
 AlignEscapedNewlines: Right
 
 AlignTrailingComments: true
+
+DerivePointerAlignment: false
+PointerAlignment: Right
+
+# para
+BinPackParameters: true
+BinPackArguments: false
+AllowAllArgumentsOnNextLine: true
+
+#short
+AllowShortIfStatementsOnASingleLine:  false
+# AllowShortBlocksOnASingleLine: Never
+# empty lines
+MaxEmptyLinesToKeep: 2
+SeparateDefinitionBlocks: Always
+KeepEmptyLinesAtEOF: true
+
+# EmptyLineBeforeAccessModifier:
+KeepEmptyLinesAtTheStartOfBlocks: true
+
 ...

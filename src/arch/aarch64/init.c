@@ -233,7 +233,7 @@ int init_hyper_low_level(void* args) {
 
     // load_dtb();
 
-    switch_to_el1();
+    // switch_to_el1();
     /* test trap */
     // *(char*)(0xa00000000) = 0;
 

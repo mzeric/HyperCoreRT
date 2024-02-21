@@ -10,8 +10,6 @@
 #include "execp.h"
 #include <errno.h>
 
-
-
 uint64_t pte_offset(vaddr_t virt, uint8_t level) {
     uint64_t mask = (1UL << ARM_PT_LPAE_SHIFT) - 1;
     uint64_t val = (virt >> ARM_PT_LEVEL_SHIFT(level)) & mask;
@@ -19,19 +17,21 @@ uint64_t pte_offset(vaddr_t virt, uint8_t level) {
 }
 
 void build_s2_table(lpae_t *cur_table, vaddr_t next_table, vaddr_t virt, uint8_t level, int attr) {
-    int idx = pte_offset(virt, level);
+    int     idx = pte_offset(virt, level);
     paddr_t addr = vir_to_phy(next_table);
     cur_table[idx] = make_p2m_table_entry(addr, attr);
 }
 
-void build_hyper_table(lpae_t *table_current_level, vaddr_t next_tbl, vaddr_t virt, uint8_t level, int attr) {
-    int idx = pte_offset(virt, level);
+void build_hyper_table(lpae_t *table_current_level, vaddr_t next_tbl, vaddr_t virt, uint8_t level,
+                       int attr) {
+    int     idx = pte_offset(virt, level);
     paddr_t addr = vir_to_phy(next_tbl);
     table_current_level[idx] = make_lpae_entry(addr >> 12, attr);
 }
 
-int __build_hyper_two_level_page_table(vaddr_t virt_start, paddr_t phys_start, uint64_t mem_size, int attr,
-        lpae_t* table_L0, lpae_t* table_L1, lpae_t* table_L2) {
+int __build_hyper_two_level_page_table(vaddr_t virt_start, paddr_t phys_start, uint64_t mem_size,
+                                       int attr, lpae_t *table_L0, lpae_t *table_L1,
+                                       lpae_t *table_L2) {
     lpae_t *pte;
 
     build_hyper_table(table_L0, (vaddr_t)table_L1, virt_start, 0, attr);
@@ -42,7 +42,7 @@ int __build_hyper_two_level_page_table(vaddr_t virt_start, paddr_t phys_start, u
     paddr_t phys_end = phys_start + mem_size;
     paddr_t next_phy_addr = phys_start & (~(ARM_PT_LEVEL_SIZE(2) - 1));
 
-    if(next_phy_addr & (MB(2) - 1)){
+    if (next_phy_addr & (MB(2) - 1)) {
         vmm_fatal("physical addr of level-2'next addr not aligned\n");
     }
 
@@ -60,15 +60,19 @@ int __build_hyper_two_level_page_table(vaddr_t virt_start, paddr_t phys_start, u
 
 void print_addr_idx(vaddr_t addr) {
 
-    vmm_info("offset[%p]= <%p, %p, %p, %p>\n", addr, pte_offset(addr, 0), pte_offset(addr, 1),
-             pte_offset(addr, 2), pte_offset(addr, 3));
+    vmm_info("offset[%p]= <%p, %p, %p, %p>\n",
+             addr,
+             pte_offset(addr, 0),
+             pte_offset(addr, 1),
+             pte_offset(addr, 2),
+             pte_offset(addr, 3));
 }
 
 int __build_hyper_three_level_page_table(vaddr_t virt_start, paddr_t phys_start, uint64_t mem_size,
-        int attr, lpae_t* table_L0, lpae_t* table_L1, lpae_t* table_L2,
-        lpae_t* table_L3) {
+                                         int attr, lpae_t *table_L0, lpae_t *table_L1,
+                                         lpae_t *table_L2, lpae_t *table_L3) {
 
-    lpae_t* entry = NULL;
+    lpae_t *entry = NULL;
     vaddr_t addr;
 
     vmm_debug("page_tables: %p, %p, %p, %p\n", table_L0, table_L1, table_L2, table_L3);
@@ -105,9 +109,9 @@ int __build_hyper_three_level_page_table(vaddr_t virt_start, paddr_t phys_start,
     return 0;
 }
 
-int build_stage2_page_table(vaddr_t virt_start, paddr_t phys_start,
-        uint64_t map_size, lpae_t* table_L0, lpae_t* table_L1, lpae_t* table_L2,
-        lpae_t* table_L3, int attr) {
+int build_stage2_page_table(vaddr_t virt_start, paddr_t phys_start, uint64_t map_size,
+                            lpae_t *table_L0, lpae_t *table_L1, lpae_t *table_L2, lpae_t *table_L3,
+                            int attr) {
 
     lpae_t *entry = NULL;
     vaddr_t addr;
@@ -153,7 +157,7 @@ int build_stage2_page_table(vaddr_t virt_start, paddr_t phys_start,
 paddr_t __walk_page_table(lpae_t *cur_tbl, vaddr_t addr, int level) {
 
     paddr_t next_tbl_phy;
-    lpae_t* next_tbl_vir;
+    lpae_t *next_tbl_vir;
 
 
     if (!cur_tbl || level < 0 || level > 3)
@@ -162,7 +166,7 @@ paddr_t __walk_page_table(lpae_t *cur_tbl, vaddr_t addr, int level) {
     lpae_t next_pte = cur_tbl[pte_offset(addr, level)];
     next_tbl_phy = next_pte.pt.base << 12;
 
-    if(next_pte.pt.valid == 0)
+    if (next_pte.pt.valid == 0)
         return 0;
 
 
@@ -170,12 +174,9 @@ paddr_t __walk_page_table(lpae_t *cur_tbl, vaddr_t addr, int level) {
     if (level == 3 || next_pte.pt.table == 0)
         return next_tbl_phy;
 
-    next_tbl_vir = (lpae_t*)phy_to_vir(next_tbl_phy);
+    next_tbl_vir = (lpae_t *)phy_to_vir(next_tbl_phy);
 
     return __walk_page_table(next_tbl_vir, addr, level + 1);
 }
 
-void* kmap(paddr_t paddr) {
-
-    return NULL;
-}
+void *kmap(paddr_t paddr) { return NULL; }
