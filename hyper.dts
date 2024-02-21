@@ -48,15 +48,13 @@
         };
     };
 
-
-
     refclk200: refclk200mhz {
         #clock-cells = <0>;
         compatible = "fixed-clock";
         clock-frequency = <0xbebc200>; //200MHz
     };
 
-    uart0: uart@22030000 {
+    uart0: uart@09000000 {
         compatible = "arm,pl011", "arm,primecell";
         clock-names = "uartclk", "apb_pclk";
         clocks = <&refclk200 &refclk200>;

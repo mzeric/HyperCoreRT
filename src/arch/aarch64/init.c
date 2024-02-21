@@ -126,7 +126,7 @@ int get_phys_bits() {
 
 
 int load_dtb() {
-    char* fdt = (uint64_t*)0x42000000;
+    char* fdt = (uint64_t*)0x40000000;
 
     paddr_t  mem_addr;
     size_t   mem_size;
@@ -231,7 +231,7 @@ int init_hyper_low_level(void* args) {
 
     vmm_info("=%x\n", mrs(VTTBR_EL2));
 
-    load_dtb();
+    // load_dtb();
 
     switch_to_el1();
     /* test trap */

@@ -5,6 +5,13 @@ IndentWidth: 4
 ColumnLimit: 100
 PointerAlignment: Left
 ContinuationIndentWidth: 8
-AlignAfterOpenBracket: DontAlign
 SortIncludes: false
+
+AlignAfterOpenBracket: Align
+AlignConsecutiveDeclarations: true
+
+AlignConsecutiveMacros: true
+AlignEscapedNewlines: Right
+
+AlignTrailingComments: true
 ...

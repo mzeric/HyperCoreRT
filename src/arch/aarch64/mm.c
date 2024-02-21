@@ -59,21 +59,55 @@ DEFINE_PAGE_TABLE(stage2_L2_b);
 DEFINE_PAGE_TABLES(stage2_L3, BOOT_MAP_SIZE / ARM_PT_LEVEL_SIZE(2));
 DEFINE_PAGE_TABLES(stage2_L3_b, 1);
 
-#define PAGE_CNT (CONFIG_PHY_MEM_SIZE>>PAGE_SHIFT)
+#define PAGE_CNT (CONFIG_PHY_MEM_SIZE >> PAGE_SHIFT)
 
-#define DIRECT_MAPPING_VIRT_START (0xF00UL << 32) /* 0xF00_0000_0000 */
-#define DIRECT_MAPPING_VIRT_END (0xFF0UL << 32) /* 0xFF0_0000_0000 */
+#define DIRECT_MAPPING_VIRT_START (0xF0UL << 32) /* 0xF0_0000_0000 */
+#define DIRECT_MAPPING_VIRT_END   (0xFFUL << 32) /* 0xFF_0000_0000 max 16GB */
 
-#define PHYS_OFFSET CONFIG_ENTRY_ADDR
-#define VIRT_OFFSET DIRECT_MAPPING_VIRT_END
+#define PAGE_PHYS_OFFSET ((((u64) & _hyper_end) + MB(1) + MB(2) - 1) & (~(MB(2) - 1)))
+#define PAGE_VIRT_OFFSET DIRECT_MAPPING_VIRT_START
 
-#define VIRT_TO_PHYS(addr) (((addr)-VIRT_OFFSET) + PHYS_OFFSET)
+#define VIRT_TO_PHYS(addr) (((addr)-PAGE_VIRT_OFFSET) + PAGE_PHYS_OFFSET)
+#define PHYS_TO_VIRT(addr) (((addr)-PAGE_PHYS_OFFSET) + PAGE_VIRT_OFFSET)
 
-DEFINE_PAGE_TABLE(stage2_direct_mapping_L0);
-DEFINE_PAGE_TABLES(stage2_direct_mapping_L1, (CONFIG_PHY_MEM_SIZE)/ ARM_PT_LEVEL_SIZE(1)); /* reprent 512G space*/
-DEFINE_PAGE_TABLES(stage2_direct_mapping_L2, (CONFIG_PHY_MEM_SIZE)/ ARM_PT_LEVEL_SIZE(1));
-DEFINE_PAGE_TABLES(stage2_direct_mapping_L3, BOOT_MAP_SIZE / ARM_PT_LEVEL_SIZE(2));
+DEFINE_PAGE_TABLE(pages_direct_mapping_L0);
+DEFINE_PAGE_TABLES(pages_direct_mapping_L1, (CONFIG_PHY_MEM_SIZE)/ ARM_PT_LEVEL_SIZE(1)); /* reprent 512G space*/
+DEFINE_PAGE_TABLES(pages_direct_mapping_L2, (CONFIG_PHY_MEM_SIZE)/ ARM_PT_LEVEL_SIZE(1));
 DEFINE_PAGE_TABLES(stage2_fix_mapping_L2, 512);
+
+
+paddr_t vir_to_phy(vaddr_t v) {
+    if(v < PAGE_VIRT_OFFSET)
+        return (paddr_t)v;
+
+    return (paddr_t)VIRT_TO_PHYS(v);
+}
+
+vaddr_t phy_to_vir(paddr_t v) {
+    if (v < PAGE_PHYS_OFFSET)
+        return v;
+
+    return PHYS_TO_VIRT(v);
+}
+
+
+int init_direct_mapping() {
+    paddr_t phy_start = PAGE_PHYS_OFFSET;
+    size_t  map_size = (1ul << 30);
+    paddr_t phy_end = phy_start + map_size;
+
+    vmm_debug("page direct-mapping %p -> %p\n", phy_start, phy_end);
+    print_addr_idx(PAGE_VIRT_OFFSET);
+    vmm_debug("page-tables: %p,%p,%p,%p\n", boot_pgtable, pages_direct_mapping_L1,
+              pages_direct_mapping_L2);
+    /* use two-level tables */
+    __build_hyper_two_level_page_table(PAGE_VIRT_OFFSET, phy_start, map_size, MT_NORMAL,
+                                       boot_pgtable, pages_direct_mapping_L1,
+                                       pages_direct_mapping_L2);
+    ptw_test(boot_pgtable, PAGE_VIRT_OFFSET);
+
+    *((int*)PAGE_VIRT_OFFSET) = 0xbeaf;
+}
 
 
 /* 2MB one slot */
@@ -84,7 +118,7 @@ void __fix_map(vaddr_t virt, paddr_t phys, int slot, int attr, lpae_t *table_L0,
 
     lpae_t e = make_lpae_entry(phys >> 12, attr);
     e.pt.table = 0;
-    lpae_t *entry_start = &fix[slot];
+    lpae_t* entry_start = &fix[slot];
     entry_start[pte_offset(virt, 2)] = e;
     // vmm_info("------ %p %p = %p\n", stage2_fix_mapping_L2, &entry_start[72], e.bits);
 }
@@ -100,25 +134,29 @@ void fix_unmap(int slot) {
     stage2_fix_mapping_L2[slot].bits = 0;
 }
 
+int build_hyper_two_level_page_table(vaddr_t virt_start, paddr_t phys_start, size_t mem_size,
+                                     int attr) {
 
-int build_hyper_two_level_page_table(vaddr_t virt_start, paddr_t phys_start, size_t mem_size, int attr) {
+    lpae_t* table_L0 = boot_pgtable;
+    lpae_t* table_L1 = boot_first;
+    lpae_t* table_L2 = boot_second;
 
-    lpae_t *table_L0 = boot_pgtable;
-    lpae_t *table_L1 = boot_first;
-    lpae_t *table_L2 = boot_second;
+    vmm_debug("virt idx: %d %d %d %d\n", pte_offset(virt_start, 0), pte_offset(virt_start, 1),
+              pte_offset(virt_start, 2), pte_offset(virt_start, 3));
 
-    return __build_hyper_two_level_page_table(virt_start, phys_start, mem_size,
-            attr, table_L0, table_L1, table_L2);
+    return __build_hyper_two_level_page_table(virt_start, phys_start, mem_size, attr, table_L0,
+                                              table_L1, table_L2);
 }
 
-int build_hyper_three_level_page_table(vaddr_t virt_start, paddr_t phys_start, size_t mem_size, int attr) {
+int build_hyper_three_level_page_table(vaddr_t virt_start, paddr_t phys_start, size_t mem_size,
+                                       int attr) {
 
     lpae_t* table_L0 = boot_pgtable;
     lpae_t* table_L1 = boot_first;
     lpae_t* table_L2 = boot_second;
     lpae_t* table_L3 = boot_third;
-    return __build_hyper_three_level_page_table(virt_start, phys_start, mem_size,
-            attr, table_L0, table_L1, table_L2, table_L3);
+    return __build_hyper_three_level_page_table(virt_start, phys_start, mem_size, attr, table_L0,
+                                                table_L1, table_L2, table_L3);
 }
 
 void dump_stage2_table(int level) {
@@ -136,11 +174,14 @@ void dump_stage2_table(int level) {
     we need check is_L2_valid & is_L3_valid
 
 */
-#define ENTRY_VALID 1
 
 lpae_t* get_next_table(lpae_t* cur_level, vaddr_t addr, int level) {
-    int idx = pte_offset(addr, level);
+    int    idx = pte_offset(addr, level);
     lpae_t e = cur_level[idx];
+
+    int* a;
+    struct lpae_t* this = a;
+
     return (lpae_t*)((vaddr_t)e.p2m.base << 12);
 }
 
@@ -157,12 +198,11 @@ void create_uart_guest_map() {
     // stage2_L3_b[0] = make_p2m_table_entry(mem_start, 0);//
     stage2_L3_b[idx].bits = 0x09000000 | 0x7ff;
     // p[idx] = make_p2m_table_entry(0x40200000, p2m_mmio_direct_dev);
-    *(volatile unsigned long*)0x40200000 = 0xbeaf;
-    vmm_info("XXX:%p, %p\n", stage2_L2_b[72].bits, stage2_L3_b);
     vmm_info("uart index: %d %d %d %d\n", pte_offset(mem_start, 0),
             pte_offset(mem_start, 1),
             pte_offset(mem_start, 2),
             pte_offset(mem_start, 3));
+
 #endif
 }
 
@@ -235,10 +275,43 @@ void enable_mmu(void* table) {
     vmm_debug("enable mmu done\n");
 }
 
+int ptw_test(lpae_t * tbl_root, vaddr_t vir) {
+    paddr_t p = __walk_page_table(tbl_root, vir, 0) | ((vir) & 0xFFF);
+    vmm_info("PTW(%p) -> (%p)\n", vir, p);
+
+    paddr_t e = vir_to_phy(vir);
+
+    if (p != e) {
+        vmm_err("ptw failed for %p (%p != %p)\n", vir, p, e);
+        return -1;
+    }
+
+    vmm_info("PTW for %p PASS\n", vir);
+    return 0;
+}
+
+#define PAGE_ADDR(pfn) (pfn < 0 ? 0 : (PAGE_VIRT_OFFSET + ((pfn) << PAGE_SHIFT)))
+
+void test_page_alloc() {
+    init_page_allocator();
+    int pfn2 = alloc_pages(2);
+    int pfn = alloc_pages(1);
+    vmm_info("get page:%d vir: %p, %d:%p\n", pfn2, PAGE_ADDR(pfn2), pfn, PAGE_ADDR(pfn));
+
+    free_pages(pfn2, 2);
+    if (pfn2 != alloc_pages(1))
+        vmm_info("page allocator Failed\n");
+
+    vmm_info("page allocator test PASS\n");
+
+    page_summary();
+    print_page_layout(0, 1024);
+}
 
 void init_mm(void) {
 
-    extern void *_hyper_start, *_hyper_end;
+    int ret = 0;
+
     // size_t map_size alloced 8MB, only map real size
     size_t map_size = (paddr_t)&_hyper_end - (paddr_t)&_hyper_start;
     // MUST aligned by PAGE_SIZE
@@ -251,7 +324,7 @@ void init_mm(void) {
 
 #endif
 
-    vmm_info("image size: 0x%x\n", map_size);
+    vmm_info("image size: 0x%x from %p -> %p\n", map_size, &_hyper_start, &_hyper_end);
 
     asm volatile("msr sctlr_el1, xzr");
 
@@ -263,17 +336,25 @@ void init_mm(void) {
 
     size_t phy_memory_size = CONFIG_PHY_MEM_SIZE;
 
+    // map_size = phy_memory_size;
+
+    vmm_debug("dbug: from %lx %lx size:%lx\n", MEM_VIRT_START, MEM_VIRT_START, map_size);
 #ifdef CONFIG_HOST_USE_2MB_MAPPING
     build_hyper_two_level_page_table(MEM_VIRT_START, MEM_VIRT_START,
-            MEM_VIRT_START + (uint64_t)map_size, MT_NORMAL);
+            (uint64_t)map_size, MT_NORMAL);
 #else
-    build_hyper_three_level_page_table(MEM_VIRT_START, MEM_VIRT_START, map_size, MT_NORMAL);
+    build_hyper_three_level_page_table(MEM_VIRT_START, MEM_VIRT_START, (uint64_t)map_size, MT_NORMAL);
 #endif
     fix_map(0x09000000, 0x09000000, 0, MT_NORMAL);
     /* setup stage2 */
     enable_stage2_traslation(stage2_L0);
 
-    // enable_mmu(stage2_direct_mapping_L0);
+    // enable_mmu(pages_direct_mapping_L0);
     enable_mmu(boot_pgtable);
 
+
+    ret = ptw_test(boot_pgtable, MEM_VIRT_START+map_size-1);
+
+    init_direct_mapping();
+    test_page_alloc();
 }

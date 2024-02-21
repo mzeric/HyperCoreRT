@@ -336,7 +336,9 @@ static inline int lpae_is_superpage(lpae_t pte, unsigned int level)
 
 #define ARM_PT_LEVEL_SHIFT(lvl)   LEVEL_SHIFT_GS(PAGE_SHIFT, lvl)
 #define ARM_PT_LEVEL_ORDER(lvl)   LEVEL_ORDER_GS(PAGE_SHIFT, lvl)
+// ARM_PT_LEVEL_SIZE(x) : total bytes thaat one levle-x entry points to
 #define ARM_PT_LEVEL_SIZE(lvl)    LEVEL_SIZE_GS(PAGE_SHIFT, lvl)
+
 #define ARM_PT_LEVEL_MASK(lvl)    (~(ARM_PT_LEVEL_SIZE(lvl) - 1))
 
 /* Convenience aliases */

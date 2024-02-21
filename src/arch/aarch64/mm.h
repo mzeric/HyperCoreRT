@@ -98,4 +98,14 @@ lpae_t make_lpae_entry(mfn_t mfn, unsigned int attr);
 void init_mm(void);
 
 paddr_t vir_to_phy(vaddr_t v);
-int get_phys_bits();
+vaddr_t phy_to_vir(paddr_t v);
+
+int          get_phys_bits();
+void         print_addr_idx(vaddr_t addr);
+paddr_t      __walk_page_table(lpae_t* cur_tbl_entry, vaddr_t addr, int level);
+
+int alloc_pages(int order);
+void free_pages(int start, int order);
+int init_page_allocator();
+
+extern void *_hyper_start, *_hyper_end;

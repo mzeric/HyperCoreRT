@@ -21,3 +21,6 @@ config CONFIG_PADDR_BITS
     int "physical address bits"
     range 1 50
     default 44
+config CONFIG_DTB_LOAD_PHYS_ADDR
+    hex "dtb(Device Tree) load address without bootloader"
+    default 0x40000000

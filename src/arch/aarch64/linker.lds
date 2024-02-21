@@ -65,7 +65,6 @@ SECTIONS{
 		PROVIDE(_hvc_stack_end = .);
 	}
 
-  _hyper_end = .;
 
   .guest_test_stack :
   {
@@ -80,4 +79,5 @@ SECTIONS{
       *(.note.GNU-stack)
   }
 
+  _hyper_end = .;
 }
