@@ -64,6 +64,7 @@ DEFINE_PAGE_TABLES(stage2_L3_b, 1);
 
 
 lpae_t *g_kmap_l2_tbl = NULL; /* after page-allocatore setup, alloc by alloc_pages() */
+lpae_t *g_kmap_l3_tbl = NULL; /* for 4k table */
 
 DEFINE_PAGE_TABLE(pages_direct_mapping_L0);
 DEFINE_PAGE_TABLES(pages_direct_mapping_L1, 2); /* reprent 512G space*/
@@ -96,7 +97,7 @@ int init_direct_mapping() {
               pages_direct_mapping_L1,
               pages_direct_mapping_L2);
     /* use two-level tables */
-    __build_hyper_two_level_page_table(PAGE_VIRT_OFFSET,
+    __build_vmm_two_level_page_table(PAGE_VIRT_OFFSET,
                                        phy_start,
                                        map_size,
                                        MT_NORMAL,
@@ -105,7 +106,6 @@ int init_direct_mapping() {
                                        pages_direct_mapping_L2);
     ptw_test(boot_pgtable, PAGE_VIRT_OFFSET);
 
-    *((int *)PAGE_VIRT_OFFSET) = 0xbeaf;
 }
 
 /* 2MB one slot */
@@ -115,7 +115,7 @@ void __fix_map(vaddr_t virt, paddr_t phys, int slot, int attr, lpae_t *table_L0,
     build_s2_table(table_L0, (vaddr_t)table_L1, virt, 0, attr);
     build_s2_table(table_L1, (vaddr_t)&fix[slot], virt, 1, attr);
 
-    lpae_t e = make_lpae_entry(phys >> 12, attr);
+    lpae_t e = make_lpae_entry(phys, attr);
     e.pt.table = 0;
     lpae_t *entry_start = &fix[slot];
     entry_start[pte_offset(virt, 2)] = e;
@@ -144,7 +144,7 @@ int build_hyper_two_level_page_table(vaddr_t virt_start, paddr_t phys_start, siz
               pte_offset(virt_start, 2),
               pte_offset(virt_start, 3));
 
-    return __build_hyper_two_level_page_table(
+    return __build_vmm_two_level_page_table(
         virt_start, phys_start, mem_size, attr, table_L0, table_L1, table_L2);
 }
 
@@ -155,7 +155,7 @@ int build_hyper_three_level_page_table(vaddr_t virt_start, paddr_t phys_start, s
     lpae_t *table_L1 = boot_first;
     lpae_t *table_L2 = boot_second;
     lpae_t *table_L3 = boot_third;
-    return __build_hyper_three_level_page_table(
+    return __build_vmm_three_level_page_table(
         virt_start, phys_start, mem_size, attr, table_L0, table_L1, table_L2, table_L3);
 }
 
@@ -298,10 +298,8 @@ int ptw_test(lpae_t *tbl_root, vaddr_t vir) {
 }
 
 void test_page_alloc() {
-    init_page_allocator();
-    init_kmalloc();
 
-    page_alloc_test();
+
 
     /* test kmalloc/kfree */
     void *k_ptr;
@@ -322,7 +320,7 @@ void test_page_alloc() {
     int pfn = alloc_pages(1);
             // print_page_layout(0, 512);
 
-    vmm_info("get page:<%d vir: %p>, <%d vir:%p>\n", pfn2, PAGE_ADDR(pfn2), pfn, PAGE_ADDR(pfn));
+    vmm_info("get page:<%d vir: %p>, <%d vir:%p>\n", pfn2, PAGE_VIR(pfn2), pfn, PAGE_VIR(pfn));
 
     free_pages(pfn2, 2);
             // print_page_layout(0, 512);
@@ -342,20 +340,38 @@ void test_page_alloc() {
              ARM_PT_LEVEL_SHIFT(1));
 
     /* init kmap */
-    int fn = alloc_pages(ffs(KMAP_TBL_PAGE_NUM));
+    int fn = alloc_pages_cnt(KMAP_L2_PAGE_NUM);
     if (fn < 0)
         vmm_fatal("no enough pages:%x for kmap\n", KMAP_TBL_PAGE_NUM);
-    g_kmap_l2_tbl = (lpae_t *)PAGE_ADDR(fn);
+    g_kmap_l2_tbl = (lpae_t *)PAGE_VIR(fn);
+
+    fn = alloc_pages_cnt(KMAP_L3_PAGE_NUM);
+    if (fn < 0)
+        vmm_fatal("no engouth pages:%x for kmap L3\n");
+    g_kmap_l3_tbl = (lpae_t *)PAGE_VIR(fn);
 
 #define KMAP_INVALID_ADDR 0
-    __build_hyper_two_level_page_table(KMAP_VIRT_START,
+#if 0
+    __build_vmm_two_level_page_table(KMAP_VIRT_START,
                                        KMAP_INVALID_ADDR,
                                        (KMAP_VIRT_END - KMAP_VIRT_START),
                                        MT_NORMAL,
                                        boot_pgtable,
                                        pages_direct_mapping_L1,
                                        g_kmap_l2_tbl);
+#endif
 
+
+
+    __ptw_map_4k_page(0xE100000000ul, 0x09000000, boot_pgtable, 0, MT_NORMAL);
+
+    // __ptw_unmap_4k_page(0xE100001000ul, boot_pgtable, 0);
+
+    // __ptw_unmap_4k_page(0xE100000000ul, boot_pgtable, 0);
+
+    // __ptw_map_4k_page(0xE100000000ul, 0x09000000, boot_pgtable, 0, MT_NORMAL);
+
+    *(volatile uint64_t*)0xE100000000ul = '+';
 }
 
 void init_mm(void) {
@@ -406,5 +422,22 @@ void init_mm(void) {
     ret = ptw_test(boot_pgtable, MEM_VIRT_START + map_size - 1);
 
     init_direct_mapping();
+    init_page_allocator();
+    init_kmalloc();
+
+    init_kmap();
+
     test_page_alloc();
+
+    // u64 vp =  __vmalloc(0x4000);
+    // u64 vp2 = __vmalloc(0x2000);
+    // __vfree(vp, 0x4000);
+    // u64 vp3 = __vmalloc(0x3000);
+    // vmm_debug("_vmalloc get %lx, %lx %lx\n",vp, vp2, vp3);
+
+
+    void *uart_addr = ioremap_page(0x09000000, MT_NORMAL);
+    *(u64*)uart_addr = '^';
+    iounmap_page(uart_addr);
+
 }

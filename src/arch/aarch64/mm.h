@@ -90,30 +90,39 @@ extern void *_hyper_start, *_hyper_end;
 
 #define KMAP_VIRT_START           (0xE0ul << 32)     /* 0xE0_0000_0000 */
 #define KMAP_VIRT_END             (0xE01000ul << 16) /* 0xE0_1000_0000 256MB */
+#define KMAP_PAGE_NUM             ((KMAP_VIRT_END - KMAP_VIRT_START) >> PAGE_SHIFT)
+#define KMAP_L3_PAGE_NUM          (round_up(KMAP_PAGE_NUM, 512) / 512)
+#define KMAP_L2_PAGE_NUM          (round_up(KMAP_L3_PAGE_NUM, 512) / 512)
+
 #define DIRECT_MAPPING_VIRT_START (0xF0UL << 32)     /* 0xF0_0000_0000 */
 #define DIRECT_MAPPING_VIRT_END   (0xFFUL << 32)     /* 0xFF_0000_0000 max 16GB */
+
+
 
 #define PAGE_PHYS_OFFSET ((((u64) &_hyper_end) + MB(1) + MB(2) - 1) & (~(MB(2) - 1)))
 #define PAGE_VIRT_OFFSET DIRECT_MAPPING_VIRT_START
 
 #define VIRT_TO_PHYS(addr) (((u64)(addr)-PAGE_VIRT_OFFSET) + PAGE_PHYS_OFFSET)
 #define PHYS_TO_VIRT(addr) (((addr)-PAGE_PHYS_OFFSET) + PAGE_VIRT_OFFSET)
-#define PAGE_ADDR(pfn)     ((pfn) < 0 ? 0 : (PAGE_VIRT_OFFSET + ((pfn) << PAGE_SHIFT)))
-#define VIR_FN(addr)                                                                               \
-    ((u64)(addr) < PAGE_VIRT_OFFSET) ? -1 : (((u64)(addr) - PAGE_VIRT_OFFSET) >> PAGE_SHIFT)
+#define PAGE_VIR(pfn)     ((pfn) < 0 ? 0 : (PAGE_VIRT_OFFSET + ((pfn) << PAGE_SHIFT)))
+#define PAGE_PHY(pfn)      ((pfn) < 0 ? 0 : (PAGE_PHYS_OFFSET + ((pfn) << PAGE_SHIFT)))
+
+#define VIR_TO_FN(addr)                                                                            \
+    ((u64)(addr) < PAGE_VIRT_OFFSET) ? -1 : (((u64)(addr)-PAGE_VIRT_OFFSET) >> PAGE_SHIFT)
+#define PHY_TO_FN(addr)                                                                            \
+    ((u64)(addr) < PAGE_PHYS_OFFSET) ? -1 : (((u64)(addr)-PAGE_PHYS_OFFSET) >> PAGE_SHIFT)
 
 
 #define KMAP_TBL_PAGE_NUM                                                                          \
     ((KMAP_VIRT_END - KMAP_VIRT_START + ARM_PT_LEVEL_SIZE(1) - 1) >> ARM_PT_LEVEL_SHIFT(1))
 
 
-
 void build_hyper_table(lpae_t *table_current_level, vaddr_t next_tbl, vaddr_t virt, uint8_t level, int attr);
 
-int __build_hyper_two_level_page_table(vaddr_t virt_start, paddr_t phys_start, uint64_t mem_size,
+int __build_vmm_two_level_page_table(vaddr_t virt_start, paddr_t phys_start, uint64_t mem_size,
         int attr, lpae_t* table_L0, lpae_t* table_L1, lpae_t* table_L2);
 
-int __build_hyper_three_level_page_table(vaddr_t virt_start, paddr_t phys_start, uint64_t map_size,
+int __build_vmm_three_level_page_table(vaddr_t virt_start, paddr_t phys_start, uint64_t map_size,
         int attr, lpae_t* table_L0, lpae_t* table_L1, lpae_t* table_L2,
         lpae_t* table_L3);
 
@@ -121,8 +130,12 @@ int build_stage2_page_table(vaddr_t virt_start, paddr_t phys_start,
         uint64_t map_size, lpae_t* L0, lpae_t* L1, lpae_t* L2, lpae_t* L3,
         int attr);
 
+int __ptw_map_4k_page(vaddr_t vir_addr, paddr_t phy_addr, lpae_t *cur_tbl, int level,
+                      int attr);
+int __ptw_unmap_4k_page(vaddr_t vir_addr, lpae_t *pre_tbl, int level);
+
 lpae_t make_p2m_table_entry(vaddr_t virt, int attr);
-lpae_t make_lpae_entry(mfn_t mfn, unsigned int attr);
+lpae_t make_lpae_entry(paddr_t phy_addr, unsigned int attr);
 void init_mm(void);
 
 paddr_t vir_to_phy(vaddr_t v);
@@ -133,10 +146,23 @@ void         print_addr_idx(vaddr_t addr);
 paddr_t      __walk_page_table(lpae_t* cur_tbl_entry, vaddr_t addr, int level);
 
 int alloc_pages(int order);
+int alloc_pages_cnt(int cnt);
+int alloc_one_page();
+
 void free_pages(int start, int order);
+void free_pages_cnt(int pfn, int cnt);
+
 int init_page_allocator();
 void *alloc_mem_pool(uint64_t size);
 
 void *kmalloc(uint64_t size);
 void *kfree(void *ptr);
+
+int      init_kmap();
+uint64_t __vmalloc(size_t size);
+void     __vfree(uint64_t ptr, size_t size);
+void    *ioremap_page(paddr_t phy, int attr);
+void    *iounmap_page(vaddr_t vir);
+int      __kmap_one_page(vaddr_t vir, paddr_t phy, int attr);
+
 

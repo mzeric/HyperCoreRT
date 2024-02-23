@@ -126,28 +126,30 @@ int get_phys_bits() {
 
 
 int load_dtb() {
-    char* fdt = (uint64_t*)0x40000000;
+    // char* fdt = (uint64_t*)0x40000000;
 
-    paddr_t  mem_addr;
-    size_t   mem_size;
+    char *fdt = (char *)ioremap_page(0x40001000, MT_NORMAL);
+
+    u64 mem_addr;
+    u64 mem_size;
     int root_node = -1;
 
 
     root_node = fdt_node_offset_by_compatible(fdt, -1, "hypervisor,platform");
     if (root_node < 0)
-
         vmm_fatal("not compatible with \"hypercorert\" found\n");
-
-    int node = fdt_node_offset_by_prop_value(fdt, root_node, "device_type", "memory", sizeof("memory"));
-    if(node < 0)
+    int node =
+        fdt_node_offset_by_prop_value(fdt, root_node, "device_type", "memory", sizeof("memory"));
+    if (node < 0)
         vmm_fatal("no memory region found\n");
-
+    vmm_debug("fdt %d\n", node);
 
     const char *name = fdt_get_name(fdt, node, NULL);
-    if(fdt_get_reg_info(fdt, node, &mem_addr, &mem_size)<0)
+    if (fdt_get_reg_info(fdt, node, &mem_addr, &mem_size) < 0)
         vmm_fatal("memory fdt parse failed\n");
-    vmm_info("\"%s\" -> <%p, %lx>\n", name, mem_addr, mem_size);
+    vmm_info("\"%s\" -> <%p, 0x%lx>\n", name, mem_addr, mem_size);
 
+    iounmap_page(fdt);
     return 0;
 }
 
@@ -231,7 +233,7 @@ int init_hyper_low_level(void* args) {
 
     vmm_info("=%x\n", mrs(VTTBR_EL2));
 
-    // load_dtb();
+    load_dtb();
 
     // switch_to_el1();
     /* test trap */

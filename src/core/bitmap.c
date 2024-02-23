@@ -31,13 +31,10 @@ void __clear_bits(uint64_t *bitmap, int start, int cnt) {
 
 void clear_bits(uint64_t *bitmap, int start, int cnt) {
     uint64_t mask = (~0ul << (start & (BITS_PER_LONG - 1)));
-
-    start = ALIGN_MASK(start, BITS_PER_LONG);
     uint64_t end = start + cnt;
 
     while (start + BITS_PER_LONG < end) {
         bitmap[start / BITS_PER_LONG] &= ~mask;
-
         start += BITS_PER_LONG;
         mask = ~0ul;
     }
@@ -50,14 +47,16 @@ void clear_bits(uint64_t *bitmap, int start, int cnt) {
 
 void set_bits(uint64_t *bitmap, int start, int cnt) {
 
+
     uint64_t mask = (~0ul << (start & (BITS_PER_LONG - 1)));
 
-    start = ALIGN_MASK(start, BITS_PER_LONG);
+
     uint64_t end = start + cnt;
+
+    start = round_down(start, BITS_PER_LONG);
 
     while (start + BITS_PER_LONG < end) {
         bitmap[start / BITS_PER_LONG] |= mask;
-
         start += BITS_PER_LONG;
         mask = ~0ul;
     }

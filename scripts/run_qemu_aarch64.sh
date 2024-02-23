@@ -8,5 +8,5 @@ ${QEMU} \
    -no-reboot \
    -kernel ./bazel-bin/hyper-elf \
    -monitor telnet:127.0.0.1:4444,server,nowait\
-   -dtb ./bazel-bin/hyper.dtb
-#   -device loader,file=./bazel-bin/hyper.dtb,force-raw=on,addr=0x40000000 \
+  -device loader,file=./bazel-bin/hyper.dtb,force-raw=on,addr=0x40001000 \
+   #-dtb ./bazel-bin/hyper.dtb

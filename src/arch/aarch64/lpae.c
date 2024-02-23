@@ -8,8 +8,9 @@ lpae_t make_p2m_table_entry(vaddr_t virt, int attr) {
 }
 
 
-lpae_t make_lpae_entry(mfn_t mfn, unsigned int attr)
+lpae_t make_lpae_entry(paddr_t phy_addr, unsigned int attr)
 {
+    mfn_t  mfn = phy_addr >> 12;
     lpae_t e = (lpae_t) {
         .pt = {
             .valid = 1,           /* Mappings are present */
