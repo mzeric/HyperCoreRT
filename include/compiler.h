@@ -38,4 +38,24 @@
 #define likely(x)     __builtin_expect(!!(x),1)
 #define unlikely(x)   __builtin_expect(!!(x),0)
 
+/*
+    some compile like aarch64-none-elf provide 'fls/ffs' function ,
+     __ffs/__fls is zero-based 0-31
+
+    Note: the index return by __ffs/__fls start from 1
+*/
+
+/*  find first (least-significant) set bit, starting at the least significant bit position,  equ __builtin_ctz */
+#define __ffs(x)  (__builtin_ffs((x)) - 1)
+#define __ffsl(x) (__builtin_ffsl((x)) - 1)
+
+/* find last   (most-significant)  set bit, starting at the least significant bit position */
+#define __fls(x)  ((sizeof(x) * 8) - __builtin_clz((x)) - 1)
+#define __flsl(x) ((sizeof(x) * 8) - __builtin_clzl((x)) - 1)
+
 #define MARK_UNUSED(x) (void)(x)
+
+#define ALIGN_MASK(x, mask)           (((x) + (mask)) & ~(mask))
+
+#define __round_mask(x, y) ((__typeof__(x))((y)-1))
+#define round_down(x, y)   ((x) & ~__round_mask(x, y))

@@ -61,27 +61,9 @@ DEFINE_PAGE_TABLES(stage2_L3_b, 1);
 
 #define PAGE_CNT (CONFIG_PHY_MEM_SIZE >> PAGE_SHIFT)
 
-/*
-    the 512G-1024G
-    0x80_0000_0000 - 0xFF_0000_0000
-    use pages_direct_mappint_L1
-*/
 
-#define KMAP_VIRT_START           (0xE0ul << 32)     /* 0xE0_0000_0000 */
-#define KMAP_VIRT_END             (0xE01000ul << 16) /* 0xE0_1000_0000 256MB */
-#define DIRECT_MAPPING_VIRT_START (0xF0UL << 32)     /* 0xF0_0000_0000 */
-#define DIRECT_MAPPING_VIRT_END   (0xFFUL << 32)     /* 0xFF_0000_0000 max 16GB */
 
 lpae_t *g_kmap_l2_tbl = NULL; /* after page-allocatore setup, alloc by alloc_pages() */
-
-#define KMAP_TBL_PAGE_NUM                                                                          \
-    ((KMAP_VIRT_END - KMAP_VIRT_START + ARM_PT_LEVEL_SIZE(1) - 1) >> ARM_PT_LEVEL_SHIFT(1))
-
-#define PAGE_PHYS_OFFSET ((((u64) & _hyper_end) + MB(1) + MB(2) - 1) & (~(MB(2) - 1)))
-#define PAGE_VIRT_OFFSET DIRECT_MAPPING_VIRT_START
-
-#define VIRT_TO_PHYS(addr) (((addr)-PAGE_VIRT_OFFSET) + PAGE_PHYS_OFFSET)
-#define PHYS_TO_VIRT(addr) (((addr)-PAGE_PHYS_OFFSET) + PAGE_VIRT_OFFSET)
 
 DEFINE_PAGE_TABLE(pages_direct_mapping_L0);
 DEFINE_PAGE_TABLES(pages_direct_mapping_L1, 2); /* reprent 512G space*/
@@ -315,22 +297,44 @@ int ptw_test(lpae_t *tbl_root, vaddr_t vir) {
     return 0;
 }
 
-#define PAGE_ADDR(pfn) (pfn < 0 ? 0 : (PAGE_VIRT_OFFSET + ((pfn) << PAGE_SHIFT)))
-
 void test_page_alloc() {
     init_page_allocator();
+    init_kmalloc();
+
+    page_alloc_test();
+
+    /* test kmalloc/kfree */
+    void *k_ptr;
+    k_ptr = kmalloc(0x100000);
+    vmm_info("test kmalloc %p\n", k_ptr);
+    kfree(k_ptr);
+    k_ptr = kmalloc(0x10000);
+    vmm_info("test kmalloc %p\n", k_ptr);
+    dump_kmalloc_status();
+    kfree(k_ptr);
+    dump_kmalloc_status();
+
+
+    // print_page_layout(0, 512);
     int pfn2 = alloc_pages(2);
+        // print_page_layout(0, 512);
+
     int pfn = alloc_pages(1);
-    vmm_info("get page:%d vir: %p, %d:%p\n", pfn2, PAGE_ADDR(pfn2), pfn, PAGE_ADDR(pfn));
+            // print_page_layout(0, 512);
+
+    vmm_info("get page:<%d vir: %p>, <%d vir:%p>\n", pfn2, PAGE_ADDR(pfn2), pfn, PAGE_ADDR(pfn));
 
     free_pages(pfn2, 2);
-    if (pfn2 != alloc_pages(1))
-        vmm_info("page allocator Failed\n");
+            // print_page_layout(0, 512);
+
+    int pfn3 = alloc_pages(1);
+    if (pfn2 != pfn3)
+        vmm_fatal("page allocator Failed %d vs %d\n", pfn2, pfn3);
+
 
     vmm_info("page allocator test PASS\n");
 
     page_summary();
-    print_page_layout(0, 1024);
     vmm_info("kmap page count: %x, %p - %p / %p\n",
              KMAP_TBL_PAGE_NUM,
              KMAP_VIRT_END,
@@ -338,7 +342,7 @@ void test_page_alloc() {
              ARM_PT_LEVEL_SHIFT(1));
 
     /* init kmap */
-    int fn = alloc_pages_cnt(KMAP_TBL_PAGE_NUM);
+    int fn = alloc_pages(ffs(KMAP_TBL_PAGE_NUM));
     if (fn < 0)
         vmm_fatal("no enough pages:%x for kmap\n", KMAP_TBL_PAGE_NUM);
     g_kmap_l2_tbl = (lpae_t *)PAGE_ADDR(fn);
@@ -352,7 +356,6 @@ void test_page_alloc() {
                                        pages_direct_mapping_L1,
                                        g_kmap_l2_tbl);
 
-    vmm_info("------- %lx\n", *(uint64_t *)KMAP_VIRT_START);
 }
 
 void init_mm(void) {

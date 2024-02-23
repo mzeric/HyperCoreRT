@@ -7,27 +7,34 @@
 #include "vmmio.h"
 #include "mm.h"
 #include "tlsf.h"
+#include "bitmap.h"
 
 #define TOTAL_PAGES     (1024 * 1024) // 总共有1M个页 = 4G
-#define BITS_PER_BYTE   8
-#define BITS_PER_UINT32 (sizeof(uint32_t) * BITS_PER_BYTE)
-#define BITMAP_SIZE     (TOTAL_PAGES / BITS_PER_UINT32)
 
-static uint32_t g_page_allocator_bitmap[BITMAP_SIZE]; /* 1 GB need 32KB */
+
+#define BITMAP_SIZE     (TOTAL_PAGES / BITS_PER_UINT64)
+
+static uint64_t g_page_allocator_bitmap[BITMAP_SIZE]; /* 1 GB need 32KB */
 
 typedef struct bitmap {
-    uint32_t data[0];
+    uint64_t *data;
+    uint64_t start;
+    // end = start + bit_nr * ele_size;
+    int      ele_size;
+    uint64_t bit_nr;
 } bitmap_t;
 
 /*
     TODO:
     * vmalloc, bitmaps
     * ioremap,ptw
-    * kmalloc/tlsf_malloc
+    * kmalloc/tlsf_malloc - DONE
 */
 // 初始化位图
 
 static void *g_kmalloc_handler;
+static void *g_kmalloc_heap;
+#define KMALLOC_HEAP_SIZE (0x1000000) /* 16MB */
 
 void *kmalloc(uint64_t size) { return tlsf_malloc(g_kmalloc_handler, size); }
 
@@ -36,56 +43,121 @@ void *kfree(void *ptr) {
         tlsf_free(g_kmalloc_handler, ptr);
 }
 
-void *init_kmalloc() {
-    void    *_kmalloc_start = NULL;
-    uint64_t size = 0x100000;
-    return tlsf_create_with_pool(_kmalloc_start, size);
-}
-
-void init_bitmap(uint32_t *bitmap, uint64_t len) { memset(bitmap, 0, sizeof(len)); }
-
-void create_bitmap() {}
-
-void destroy_bitmap() {}
-
-// 设置位
-void set_bit(uint32_t *bitmap, int n) {
-    bitmap[n / BITS_PER_UINT32] |= (1U << (n % BITS_PER_UINT32));
-}
-
-// 清除位
-void clear_bit(uint32_t *bitmap, int n) {
-    bitmap[n / BITS_PER_UINT32] &= ~(1U << (n % BITS_PER_UINT32));
-}
-
-// 检查位是否被设置
-int is_bit_set(uint32_t *bitmap, int n) {
-    return bitmap[n / BITS_PER_UINT32] & (1U << (n % BITS_PER_UINT32));
-}
-
-// 从addr开始查找连续bit_count个位为1的起始位置
-int find_next_bits(uint32_t *bitmap, int addr, int bit_count) {
-    if (bit_count == 0)
+int init_kmalloc() {
+    uint64_t size = KMALLOC_HEAP_SIZE;
+    g_kmalloc_heap = alloc_mem_pool(size);
+    if(!g_kmalloc_heap) {
+        vmm_fatal("no enough mem for kmalloc's init: 0x%lx\n", size);
         return -1;
-    for (int i = addr; i <= TOTAL_PAGES - bit_count; i++) {
-        int count = 0;
-        for (int j = i; j < TOTAL_PAGES && count < bit_count; j++) {
-            if (!is_bit_set(bitmap, j)) {
-                count++;
-            } else {
-                break; // 遇到0，中断当前搜索
-            }
-        }
-        if (count == bit_count) {
-            return i; // 找到连续bit_count个位为1的起始位置
-        }
     }
-    return -1; // 未找到
+
+    g_kmalloc_handler = tlsf_create_with_pool(g_kmalloc_heap, size);
+    if (g_kmalloc_handler == NULL) {
+        vmm_fatal("kmalloc's allocator failed\n");
+        return -1;
+    }
+
+    return 0;
 }
 
-// 查找连续bit_count个位为1的起始位置
-int find_bitmap_first_bits(uint32_t *bitmap, int bit_count) {
-    return find_next_bits(bitmap, 0, bit_count); // 从位图的起始位置开始搜索
+static void default_walker(void *ptr, size_t size, int used, void *user) {
+    u64 *p = (u64 *)user;
+
+    if (used)
+        p[0] = size;
+    else
+        p[1] = size;
+
+}
+
+void dump_kmalloc_status() {
+    void *pool = tlsf_get_pool(g_kmalloc_handler);
+
+    u64 arg[2] = {0, 0};
+    tlsf_walk_pool(pool, default_walker, arg);
+
+    vmm_info("kmalloc pool status: used:%lx, free:%lx  %.2f%%\n", arg[0], arg[1], (double)arg[0]/arg[1]*100);
+}
+
+void *fini_kmalloc() {
+    if(!g_kmalloc_heap)
+        free_mem_pool(g_kmalloc_heap, KMALLOC_HEAP_SIZE);
+}
+
+void init_bitmap(uint64_t *bitmap, uint64_t len) { memset(bitmap, 0, sizeof(len)); }
+
+
+bitmap_t create_bitmap(uint64_t start, int ele_size, int bit_nr) {
+    bitmap_t b = (bitmap_t) {
+        .bit_nr = bit_nr,
+        .ele_size = ele_size,
+        .start = start,
+    };
+
+    b.data = (uint64_t *)kmalloc(bit_nr / BITS_PER_BYTE);
+
+    memset(b.data, 0, bit_nr / BITS_PER_BYTE);
+    return b;
+}
+
+void destroy_bitmap(bitmap_t map) {
+    if(map.data)
+        kfree(map.data);
+}
+
+uint64_t bitmap_alloc_range(bitmap_t bt, size_t size) {
+    uint64_t cnt = ALIGN_MASK(size, (bt.ele_size - 1)) / bt.ele_size;
+    uint64_t idx = bitmap_find_next_zero_area(bt.data, bt.bit_nr, 0, cnt, 0);
+    set_bits(bt.data, idx, cnt);
+
+    return bt.start + idx * bt.ele_size;
+}
+
+void bitmap_free_range(bitmap_t bt, uint64_t start, uint64_t size) {
+    int idx = (start - bt.start) / bt.ele_size;
+    uint64_t cnt = ALIGN_MASK(size, (bt.ele_size - 1)) / bt.ele_size;
+    clear_bits(bt.data, idx, cnt);
+}
+
+static bitmap_t g_vmalloc_bitmap;
+
+int init_kmap() {
+    g_vmalloc_bitmap = create_bitmap(0, PAGE_SIZE, 1);
+    ;
+}
+
+void fini_kmap() { destroy_bitmap(g_vmalloc_bitmap); }
+
+void *__vmalloc(size_t size) {
+    return bitmap_alloc_range(g_vmalloc_bitmap, size);
+}
+
+void __vfree(void *ptr, size_t size) {
+    bitmap_free_range(g_vmalloc_bitmap, (uintptr_t)ptr, size);
+    ;
+}
+
+int map_one_frame(vaddr_t vir, paddr_t phy, int attr) {
+
+    /* phy should not inside page-stack */
+    // FIXME:check phy's pfn
+
+    if(phy & (PAGE_SIZE - 1))
+        vmm_fatal("phy addr not aligned: %lx\n", phy);
+
+}
+
+int __kmap_pages(vaddr_t vir, paddr_t phy, size_t size, int attr) {
+
+    return 0;
+}
+
+void *ioremap(paddr_t phy, size_t size, int attr) {
+
+}
+
+void page_alloc_test() {
+
 }
 
 int init_page_allocator() {
@@ -96,14 +168,14 @@ int init_page_allocator() {
 // 分配多个连续页
 int alloc_pages_cnt(int cnt) {
     int n = cnt;
-    int start = find_bitmap_first_bits(g_page_allocator_bitmap, n);
+    int start =
+        bitmap_find_next_zero_area(g_page_allocator_bitmap, TOTAL_PAGES, 0, n, 1);
+    if (start >= TOTAL_PAGES)
+        return TOTAL_PAGES;
 
-    if (start < 0)
-        return start;
+    set_bits(g_page_allocator_bitmap, start, n);
 
-    for (int i = start; i < start + n; i++) {
-        set_bit(g_page_allocator_bitmap, i);
-    }
+    // vmm_info("alloc-page: %d -> :%d\n", start, cnt);
 
     return start;
 }
@@ -113,11 +185,35 @@ int alloc_pages(int order) { return alloc_pages_cnt(1ul << order); }
 int alloc_one_page() { return alloc_pages_cnt(1); }
 
 // 释放多个连续页
-void free_pages(int start, int order) {
-    int n = 1ul << order;
-    for (int i = start; i < start + n; i++) {
-        clear_bit(g_page_allocator_bitmap, i);
+void free_one_page(int pfn, int cnt) { free_pages_cnt(pfn, 1); }
+
+void free_pages_cnt(int pfn, int cnt) {
+    vmm_info("free-page: %x -> :%d\n", pfn, cnt);
+    clear_bits(g_page_allocator_bitmap, pfn, cnt);
+}
+
+void free_pages(int pfn, int order) { free_pages_cnt(pfn, 1ul << order); }
+
+void *alloc_mem_pool(uint64_t size) {
+    size = (size + PAGE_SIZE - 1) & PAGE_MASK;
+    int fpn = alloc_pages_cnt(size >> PAGE_SHIFT);
+    if (fpn < 0) {
+        vmm_err("alloc page failed:0x%x\n", size);
+        return NULL;
     }
+
+    return PAGE_ADDR(fpn);
+}
+
+void free_mem_pool(void *ptr, uint64_t size) {
+    int pfn = VIR_FN(ptr);
+    int n = size >> 12;
+    if (pfn < 0 || n <= 0) {
+        vmm_err("invalid addr:%p or size: 0x%lx\n", ptr, size);
+        return;
+    }
+
+    free_pages(pfn, n);
 }
 
 void page_summary() {

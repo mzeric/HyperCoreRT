@@ -67,6 +67,8 @@ typedef enum {
     p2m_max_real_type,  /* Types after this won't be store in the p2m */
 } p2m_type_t;
 
+extern void *_hyper_start, *_hyper_end;
+
 /*
  * Stage 2 Memory Type.
  *
@@ -79,6 +81,32 @@ typedef enum {
 #define MATTR_MEM     0xf
 
 #define MB(x) ((x##u) << 20)
+
+/*
+    the 512G-1024G
+    0x80_0000_0000 - 0xFF_0000_0000
+    use pages_direct_mappint_L1
+*/
+
+#define KMAP_VIRT_START           (0xE0ul << 32)     /* 0xE0_0000_0000 */
+#define KMAP_VIRT_END             (0xE01000ul << 16) /* 0xE0_1000_0000 256MB */
+#define DIRECT_MAPPING_VIRT_START (0xF0UL << 32)     /* 0xF0_0000_0000 */
+#define DIRECT_MAPPING_VIRT_END   (0xFFUL << 32)     /* 0xFF_0000_0000 max 16GB */
+
+#define PAGE_PHYS_OFFSET ((((u64) &_hyper_end) + MB(1) + MB(2) - 1) & (~(MB(2) - 1)))
+#define PAGE_VIRT_OFFSET DIRECT_MAPPING_VIRT_START
+
+#define VIRT_TO_PHYS(addr) (((u64)(addr)-PAGE_VIRT_OFFSET) + PAGE_PHYS_OFFSET)
+#define PHYS_TO_VIRT(addr) (((addr)-PAGE_PHYS_OFFSET) + PAGE_VIRT_OFFSET)
+#define PAGE_ADDR(pfn)     ((pfn) < 0 ? 0 : (PAGE_VIRT_OFFSET + ((pfn) << PAGE_SHIFT)))
+#define VIR_FN(addr)                                                                               \
+    ((u64)(addr) < PAGE_VIRT_OFFSET) ? -1 : (((u64)(addr) - PAGE_VIRT_OFFSET) >> PAGE_SHIFT)
+
+
+#define KMAP_TBL_PAGE_NUM                                                                          \
+    ((KMAP_VIRT_END - KMAP_VIRT_START + ARM_PT_LEVEL_SIZE(1) - 1) >> ARM_PT_LEVEL_SHIFT(1))
+
+
 
 void build_hyper_table(lpae_t *table_current_level, vaddr_t next_tbl, vaddr_t virt, uint8_t level, int attr);
 
@@ -107,5 +135,8 @@ paddr_t      __walk_page_table(lpae_t* cur_tbl_entry, vaddr_t addr, int level);
 int alloc_pages(int order);
 void free_pages(int start, int order);
 int init_page_allocator();
+void *alloc_mem_pool(uint64_t size);
 
-extern void *_hyper_start, *_hyper_end;
+void *kmalloc(uint64_t size);
+void *kfree(void *ptr);
+
