@@ -201,6 +201,17 @@ int cpu_init(void) {
     return 0;
 }
 
+uint32_t ioread32(void *addr) { return *(volatile uint32_t *)addr; }
+
+
+void iowrite32(void *addr, uint32_t value) { *(volatile uint32_t *)addr = value; }
+
+
+#define GICD_BASE (0x08000000)
+#define GICC_BASE (0x08010000)
+#define GICR_BASE (0x080A0000)
+
+
 int init_hyper_low_level(void* args) {
 
     uint64_t el;
@@ -213,6 +224,16 @@ int init_hyper_low_level(void* args) {
         panic("");
     }
 
+
+    // vmm_info("----------------- %lx\n", ioread32(0x08000000 + 0xFFD0));
+
+    // iowrite32(GICD_CTRL, 0x51);
+    // iowrite32(GICC_CTRL, 0x51);
+    // *(volatile uint32_t *)GICD_CTRL |= 1;
+
+
+
+    // iowrite32(GICD_ENABLE, (3<<30));
     cpu_init();
 #if 0
     /* for memset */
@@ -233,14 +254,35 @@ int init_hyper_low_level(void* args) {
 
     vmm_info("=%x\n", mrs(VTTBR_EL2));
 
-    load_dtb();
+    // load_dtb();
 
-    // switch_to_el1();
     /* test trap */
     // *(char*)(0xa00000000) = 0;
 
+
+    // switch_to_el1();
+
+    void *gicd_base = (void*)ioremap_page(0x08000000, MT_DEVICE_nGnRnE);
+    void *gicc_base = (void*)ioremap_page(0x08010000, MT_NORMAL);
+    void *gicr_base = (void*)ioremap(GICR_BASE, 0x200000, MT_DEVICE_nGnRnE);
+
+    vmm_info("GICv - %x\n", readl(gicd_base + 0x4));
+
+    if (readl(gicd_base + 0x4) == 0x68)
+        init_gicv2(gicd_base, gicc_base);
+    else
+        init_gicv3(gicd_base, gicr_base);
+
+
+    iounmap_page(gicd_base);
+    iounmap_page(gicc_base);
+    iounmap(gicr_base, 0x200000);
+
     vmm_info("current el: %d\n", current_el());
     vmm_info("here\n");
+
+    timer_init();
+
 
     return 0;
 }

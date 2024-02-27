@@ -397,6 +397,7 @@ void init_mm(void) {
     uint32_t hcr_val = get_default_hcr_flags();
     // we only support AArch64 for now
     hcr_val |= (1 << 31);
+    // hcr_val |= HCR_TGE;
     vmm_info("hcr: %x\n", hcr_val);
     msr(hcr_el2, hcr_val);
 

@@ -255,6 +255,9 @@ hyp_sync:
                 call_excep do_hyper_sync
         excep_return
 hyp_irq:
+                excep_entry
+		call_excep do_irq_mode, #1
+                excep_return
 hyp_error:
                 excep_entry
 		call_excep do_bad_mode, #1

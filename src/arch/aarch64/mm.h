@@ -165,4 +165,5 @@ void    *ioremap_page(paddr_t phy, int attr);
 void    *iounmap_page(vaddr_t vir);
 int      __kmap_one_page(vaddr_t vir, paddr_t phy, int attr);
 
-
+void *ioremap(paddr_t phy, int size, int attr);
+void *iounmap(vaddr_t vir, int size);

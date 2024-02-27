@@ -2,6 +2,7 @@
 
 build
 include/config
+.vscode
 # Prerequisites
 *.d
 

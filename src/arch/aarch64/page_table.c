@@ -252,7 +252,7 @@ int __ptw_unmap_4k_page(vaddr_t vir_addr, lpae_t *pre_tbl, int level) {
     }
 
     if (level == 3) {
-        vmm_debug("unmap phy: %lx avail:%d\n", cur_pte->pt.base << 12);
+        // vmm_debug("unmap phy: %lx\n", cur_pte->pt.base << 12);
         cur_pte->bits = 0;
         return 0;
     }
@@ -272,9 +272,9 @@ int __ptw_unmap_4k_page(vaddr_t vir_addr, lpae_t *pre_tbl, int level) {
 
     if (all_invalid) {
 
-        vmm_debug("debug: %d\n", next_tbl_vir->pt.avail);
+        // vmm_debug("debug: %d\n", next_tbl_vir->pt.avail);
 
-        vmm_info("unmap free page 0x%lx\n", PHY_TO_FN(next_tbl_phy));
+        // vmm_debug("unmap free page 0x%lx\n", PHY_TO_FN(next_tbl_phy));
         free_one_page(PHY_TO_FN(next_tbl_phy));
         cur_pte->bits = 0;
     }

@@ -154,6 +154,14 @@ int __kmap_one_page(vaddr_t vir, paddr_t phy, int attr) {
     return 0;
 }
 
+int __kmap_pages(vaddr_t vir, paddr_t phy, int page_num, int attr) {
+    for(int i = 0; i < page_num; ++i){
+        __kmap_one_page(vir, phy, attr);
+        vir += PAGE_SIZE;
+        phy += PAGE_SIZE;
+    }
+
+}
 void *ioremap_page(paddr_t phy, int attr) {
     u64 vaddr = __vmalloc(PAGE_SIZE);
     if (!vaddr)
@@ -165,10 +173,30 @@ void *ioremap_page(paddr_t phy, int attr) {
     return (void *)vaddr;
 }
 
+void *ioremap(paddr_t phy, int size, int attr) {
+    int page_num = round_up(size, PAGE_SIZE) >> PAGE_SHIFT;
+    u64 vaddr = __vmalloc(size);
+    if (!vaddr)
+        vmm_fatal("vmalloc failed\n");
+
+    vmm_debug("ioremap <%p, %p>\n", vaddr, phy);
+    __kmap_pages(vaddr, phy, page_num, attr);
+
+    return (void *)vaddr;
+}
+
 void *iounmap_page(vaddr_t vir) {
     extern lpae_t boot_pgtable[];
 
     __ptw_unmap_4k_page(vir, boot_pgtable, 0);
+}
+
+void *iounmap(vaddr_t vir, int size) {
+    int page_num = round_up(size, PAGE_SIZE) >> PAGE_SHIFT;
+    for (int i = 0; i < page_num; ++i) {
+        iounmap_page(vir);
+        vir += PAGE_SIZE;
+    }
 }
 
 void page_alloc_test() {}

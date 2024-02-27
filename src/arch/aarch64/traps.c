@@ -4,6 +4,7 @@
 #include "execp.h"
 #include "page.h"
 #include "system.h"
+#include "gicv3.h"
 
 #include<stdio.h> /* just remove guest warning */
 
@@ -30,9 +31,20 @@ In AArch64 state, an ERET instruction causes an exception return, see ERET on pa
 */
 void do_bad_mode(struct cpu_user_regs *regs, int is_compat) {
 
-    vmm_debug("sysr: 0x%p\n", regs->cpsr);
+    vmm_debug("sysr: 0x%p %d\n", regs->cpsr, is_compat);
     vmm_debug("el:%d\n", mrs(CurrentEL));
+
+
     while(1);
+}
+
+void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
+
+    vmm_debug("sysr: 0x%p %d\n", regs->cpsr, is_compat);
+    vmm_debug("el:%d\n", current_el());
+    int id = mrs(ICC_IAR1_EL1);
+    vmm_info("irq-%d\n", id);
+
 }
 
 uint64_t get_gva() { return mrs(FAR_EL2); }
@@ -47,7 +59,11 @@ paddr_t get_ipa() {
     return ipa;
 }
 
-int do_stage2_data_abort_trap(struct cpu_user_regs *regs, const union esr esr) {
+int do_stage2_data_abort_trap(struct cpu_user_regs *regs, const union esr esr){
+    print_iss_detail(esr);
+}
+
+void print_iss_detail(const union esr esr) {
     int fsc = esr.dabt.fsc;
 
     switch (fsc) {
@@ -233,13 +249,16 @@ void do_hyper_sync(struct cpu_user_regs *regs, int magic) {
     uint64_t esr = mrs(esr_el2);
     uint64_t far = mrs(far_el2);
     uint64_t elr = mrs(elr_el2);
-    vmm_info("spsr: 0x%x, esr: %x, far:%x,elr:%x, lr:%x\n", regs->cpsr, esr,
+    vmm_info("spsr: 0x%x, esr: %x, far:%lx,elr:%x, lr:%x\n", regs->cpsr, esr,
             far, elr, regs->lr);
 
     int ec = esr >> 26;
     vmm_info("Exception details: EC:0x%x, ISS:0x%x\n", ec, esr & 0x1ffffff);
 
     vmm_info("spsr:%x, hcr_el2:%x\n", regs->cpsr, mrs(hcr_el2));
+    const union esr esru = {.bits = regs->esr};
+
+    print_iss_detail(esru);
     panic("panic");
 }
 

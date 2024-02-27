@@ -1,6 +1,6 @@
 #pragma once
 #include <inttypes.h>
-
+#include "cpu_inline_asm.h"
 /*
  * SCTLR_EL1/SCTLR_EL2/SCTLR_EL3 bits definitions
  */
