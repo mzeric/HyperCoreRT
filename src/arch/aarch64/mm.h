@@ -134,6 +134,10 @@ int __ptw_map_4k_page(vaddr_t vir_addr, paddr_t phy_addr, lpae_t *cur_tbl, int l
                       int attr);
 int __ptw_unmap_4k_page(vaddr_t vir_addr, lpae_t *pre_tbl, int level);
 
+void build_s2_table(lpae_t *cur_table, vaddr_t next_table, vaddr_t virt, uint8_t level, int attr);
+
+uint64_t pte_offset(vaddr_t virt, uint8_t level);
+
 lpae_t make_p2m_table_entry(vaddr_t virt, int attr);
 lpae_t make_lpae_entry(paddr_t phy_addr, unsigned int attr);
 void init_mm(void);
@@ -151,19 +155,25 @@ int alloc_one_page();
 
 void free_pages(int start, int order);
 void free_pages_cnt(int pfn, int cnt);
+void free_one_page(int pfn);
 
-int init_page_allocator();
+int   init_page_allocator();
 void *alloc_mem_pool(uint64_t size);
+void  free_mem_pool(void *ptr, uint64_t size);
 
 void *kmalloc(uint64_t size);
 void *kfree(void *ptr);
 
 int      init_kmap();
+int init_kmalloc();
+
 uint64_t __vmalloc(size_t size);
 void     __vfree(uint64_t ptr, size_t size);
 void    *ioremap_page(paddr_t phy, int attr);
 void    *iounmap_page(vaddr_t vir);
 int      __kmap_one_page(vaddr_t vir, paddr_t phy, int attr);
+void dump_kmalloc_status();
+void page_summary();
 
 void *ioremap(paddr_t phy, int size, int attr);
 void *iounmap(vaddr_t vir, int size);

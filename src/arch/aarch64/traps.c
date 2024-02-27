@@ -5,8 +5,11 @@
 #include "page.h"
 #include "system.h"
 #include "gicv3.h"
+#include "list.h"
+#include "mm.h"
+#include "sched.h"
 
-#include<stdio.h> /* just remove guest warning */
+#include <stdio.h> /* just remove guest warning */
 
 /*
 
@@ -29,22 +32,35 @@ In AArch64 state, an ERET instruction causes an exception return, see ERET on pa
 • PSTATE is restored by using the contents of SPSR_ELx.
 
 */
+
+
+
+
+void destroy_task(hyper_task_t *task) {
+    if (task->regs.sp)
+        kfree(task->regs.sp);
+}
+
 void do_bad_mode(struct cpu_user_regs *regs, int is_compat) {
 
     vmm_debug("sysr: 0x%p %d\n", regs->cpsr, is_compat);
     vmm_debug("el:%d\n", mrs(CurrentEL));
 
 
-    while(1);
 }
 
 void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
 
-    vmm_debug("sysr: 0x%p %d\n", regs->cpsr, is_compat);
-    vmm_debug("el:%d\n", current_el());
     int id = mrs(ICC_IAR1_EL1);
-    vmm_info("irq-%d\n", id);
+    vmm_info("irq-%d, fired at %lx\n", id, mrs(cntpct_el0));
+    int frq = mrs(cntfrq_el0);
+    msr(cntp_tval_el0, frq);
 
+    // make_excep_task(regs);
+
+    sched_yield(regs);
+    gicv3_eof_int(id);
+    vmm_info("eret\n");
 }
 
 uint64_t get_gva() { return mrs(FAR_EL2); }

@@ -283,3 +283,4 @@ struct rdist_region {
 
 void init_gicv2(void *gicd_base, void* gicc_base);
 void init_gicv3(void *gicd_base, void* gicr_base);
+void gicv3_eof_int(int id);

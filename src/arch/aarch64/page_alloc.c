@@ -8,6 +8,8 @@
 #include "mm.h"
 #include "tlsf.h"
 #include "bitmap.h"
+#include "execp.h"
+#include <string.h>
 
 #define TOTAL_PAGES (1024 * 1024) // 总共有1M个页 = 4G
 
@@ -36,7 +38,15 @@ static void *g_kmalloc_handler;
 static void *g_kmalloc_heap;
 #define KMALLOC_HEAP_SIZE (0x1000000) /* 16MB */
 
-void *kmalloc(uint64_t size) { return tlsf_malloc(g_kmalloc_handler, size); }
+void *kmalloc(uint64_t size) {
+    void *ptr = tlsf_malloc(g_kmalloc_handler, size);
+    if (ptr < g_kmalloc_heap) {
+        vmm_err("tlsf_malloc wired return :%p\n", ptr);
+        panic("kmalloc");
+    }
+
+    return ptr;
+}
 
 void *kfree(void *ptr) {
     if (ptr)
@@ -57,6 +67,7 @@ int init_kmalloc() {
         return -1;
     }
 
+    vmm_info("-----------------:%p\n", g_kmalloc_heap);
     return 0;
 }
 
@@ -70,6 +81,7 @@ static void default_walker(void *ptr, size_t size, int used, void *user) {
 }
 
 void dump_kmalloc_status() {
+    return;
     void *pool = tlsf_get_pool(g_kmalloc_handler);
 
     u64 arg[2] = {0, 0};
@@ -96,7 +108,7 @@ bitmap_t create_bitmap(uint64_t start, int ele_size, int bit_nr) {
     };
 
     b.data = (uint64_t *)kmalloc(bit_nr / BITS_PER_BYTE);
-
+    vmm_debug("kmalloc ptr:%p\n", b.data);
     memset(b.data, 0, bit_nr / BITS_PER_BYTE);
     return b;
 }
@@ -223,8 +235,7 @@ int alloc_pages(int order) { return alloc_pages_cnt(1ul << order); }
 
 int alloc_one_page() { return alloc_pages_cnt(1); }
 
-// 释放多个连续页
-void free_one_page(int pfn, int cnt) { free_pages_cnt(pfn, 1); }
+void free_one_page(int pfn) { free_pages_cnt(pfn, 1); }
 
 void free_pages_cnt(int pfn, int cnt) {
     // vmm_info("free-page: %x -> :%d\n", pfn, cnt);

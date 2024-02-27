@@ -8,6 +8,7 @@
 
 void set_bits(uint64_t *bitmap, int start, int cnt);
 void clear_bits(uint64_t *bitmap, int start, int cnt);
+int  is_bit_set(uint64_t *bitmap, int n);
 
 uint64_t find_next_bit(const uint64_t *addr, uint64_t size, uint64_t offset);
 uint64_t find_next_zero_bit(uint64_t *map, uint64_t size, uint64_t start);

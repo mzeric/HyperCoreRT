@@ -8,6 +8,10 @@ typedef uint32_t u32;
 typedef uint8_t  u8;
 typedef uint64_t size_t;
 
+#ifndef NULL
+#define NULL 0
+#endif
+
 
 #define min(x,y) ({ \
         const typeof(x) _x = (x);       \
@@ -26,11 +30,6 @@ typedef uint64_t size_t;
 #define container_of(ptr, type, member) ({                      \
         typeof( ((type *)0)->member ) *__mptr = (ptr);          \
         (type *)( (char *)__mptr - offsetof(type,member) );})
-
-
-typedef struct {
-        volatile uint64_t lock;
-} spinlock_t;
 
 
 #define BITS_PER_LONG (64)

@@ -1,12 +1,8 @@
 #include "gicv3.h"
-
-
-uint32_t readl(void *addr) { return *(volatile uint32_t *)addr; }
-
-void writel(void *addr, uint32_t value) { *(volatile uint32_t *)addr = value; }
+#include "io.h"
 
 void init_gicv2(void *gicd_base, void *gicc_base) {
-    vmm_info("gic probe: typer:%x\n", ioread32(gicd_base + 0x8));
+    vmm_info("gic probe: typer:%x\n", readl(gicd_base + 0x8));
     u32 *gicd_ctl = (u32 *)gicd_base;
     u32 *gicc_ctl = (u32 *)gicc_base;
     *gicd_ctl |= 1;
@@ -35,7 +31,7 @@ static void gicv3_enable_sre(void) {
 }
 
 volatile void gic_udelay(int cnt) {
-    while ((volatile)cnt)
+    while (cnt)
         cnt--;
 }
 
@@ -66,11 +62,15 @@ int gicv3_cpu_init(void) {
     return 0;
 }
 
+void gicv3_eof_int(int id) {
+    msr(ICC_EOIR1_EL1, id);
+    msr(ICC_DIR_EL1, id);
+}
 int gicv3_rd_init(void *gicr_base) {
     int id = 30;
     vmm_info("GICv3 re-dist init\n");
 
-    writel(gicr_base + GICD_RDIST_SGI_BASE + GICR_ISENABLER0, 0xffffffffu);
+    writel(gicr_base + GICD_RDIST_SGI_BASE + GICR_ISENABLER0, 0x40000000);
 
     /* Configure SGIs/PPIs as non-secure Group-1 */
     writel(gicr_base + GICD_RDIST_SGI_BASE + GICR_IGROUPR0, ~0u);
@@ -90,7 +90,7 @@ void gicv3_dist_init(void *gicd_base) {
 }
 
 void init_gicv3(void *gicd_base, void *gicr_base) {
-    vmm_info("gic probe: id:%x, typer:%x\n", ioread32(gicd_base + 0x4), ioread32(gicd_base + 0x8));
+    vmm_info("gic probe: id:%x, typer:%x\n", readl(gicd_base + 0x4), readl(gicd_base + 0x8));
 
     // gic_rd_wait_for_wake(gicr_base);
 

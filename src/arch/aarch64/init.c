@@ -12,6 +12,10 @@
 #include "mm.h"
 #include "execp.h"
 #include "fdt_helper.h"
+#include "sched.h"
+#include "io.h"
+#include "gicv3.h"
+extern void timer_init();
 
 void init_mair(void) { msr(mair_el2, MAIRVAL); }
 
@@ -201,16 +205,29 @@ int cpu_init(void) {
     return 0;
 }
 
-uint32_t ioread32(void *addr) { return *(volatile uint32_t *)addr; }
-
-
-void iowrite32(void *addr, uint32_t value) { *(volatile uint32_t *)addr = value; }
-
 
 #define GICD_BASE (0x08000000)
 #define GICC_BASE (0x08010000)
 #define GICR_BASE (0x080A0000)
 
+
+void hyper_init_entry(void){
+
+
+    vmm_info("idle\n");
+    while (1) {
+        wfi();
+        vmm_info("idle wakeup\n");
+    }
+}
+
+void hyper_guard(void) {
+    vmm_info("guard\n");
+    while (1) {
+        wfi();
+        vmm_info("guard wakeup\n");
+    }
+}
 
 int init_hyper_low_level(void* args) {
 
@@ -224,16 +241,6 @@ int init_hyper_low_level(void* args) {
         panic("");
     }
 
-
-    // vmm_info("----------------- %lx\n", ioread32(0x08000000 + 0xFFD0));
-
-    // iowrite32(GICD_CTRL, 0x51);
-    // iowrite32(GICC_CTRL, 0x51);
-    // *(volatile uint32_t *)GICD_CTRL |= 1;
-
-
-
-    // iowrite32(GICD_ENABLE, (3<<30));
     cpu_init();
 #if 0
     /* for memset */
@@ -250,7 +257,7 @@ int init_hyper_low_level(void* args) {
     msr(tcr_el2, TCR_EL2_VALUE);
 #endif
     vmm_debug("el: 0x%x, current_el:0x%x, cpu:%d\n", el, current_el(),
-            aarch64_smp_id());
+            smp_id());
 
     vmm_info("=%x\n", mrs(VTTBR_EL2));
 
@@ -280,6 +287,10 @@ int init_hyper_low_level(void* args) {
 
     vmm_info("current el: %d\n", current_el());
     vmm_info("here\n");
+
+    init_sched();
+    create_task("init", hyper_init_entry, 100);
+    create_task("guard", hyper_guard, 100);
 
     timer_init();
 

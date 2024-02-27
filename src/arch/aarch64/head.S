@@ -108,25 +108,23 @@ _head:
          */
         dmb sy
 
-	sub     sp, sp,  #(UREGS_SPSR_el1 - UREGS_LR) /* CPSR, PC, SP, LR */
+	sub     sp, sp,  #(UREGS_kernel_sizeof - UREGS_LR) /* CPSR, PC, SP, LR */
 
-        push    x28, x29
-        push    x26, x27
-        push    x24, x25
-        push    x22, x23
-        push    x20, x21
-        push    x18, x19
-        push    x16, x17
-        push    x14, x15
-        push    x12, x13
-        push    x10, x11
-        push    x8, x9
-        push    x6, x7
-        push    x4, x5
-        push    x2, x3
-
-
-        push    x0, x1
+        stp x28,x29, [sp, #-16]!
+        stp x26,x27, [sp, #-16]!
+        stp x24,x25, [sp, #-16]!
+        stp x22,x23, [sp, #-16]!
+        stp x20,x21, [sp, #-16]!
+        stp x18,x19, [sp, #-16]!
+        stp x16,x17, [sp, #-16]!
+        stp x14,x15, [sp, #-16]!
+        stp x12,x13, [sp, #-16]!
+        stp x10,x11, [sp, #-16]!
+        stp x8,x9, [sp, #-16]!
+        stp x6,x7, [sp, #-16]!
+        stp x4,x5, [sp, #-16]!
+        stp x2,x3, [sp, #-16]!
+        stp x0,x1, [sp, #-16]!
 
         .if \hyp == 1        /* Hypervisor mode */
 
@@ -155,28 +153,32 @@ return_from_trap:
 
         ldr     x21, [sp, #UREGS_PC]            /* load ELR */
         ldr     x22, [sp, #UREGS_CPSR]          /* load SPSR */
-
-        pop     x0, x1
-        pop     x2, x3
-        pop     x4, x5
-        pop     x6, x7
-        pop     x8, x9
+        ldr     x23, [sp, #UREGS_SP_EL2]        /* load SP_el2 */
 
         msr     elr_el2, x21                    /* set up the return data */
         msr     spsr_el2, x22
 
-        pop     x10, x11
-        pop     x12, x13
-        pop     x14, x15
-        pop     x16, x17
-        pop     x18, x19
-        pop     x20, x21
-        pop     x22, x23
-        pop     x24, x25
-        pop     x26, x27
-        pop     x28, x29
+        mov x29, sp
+        mov sp, x23
+        ldr    x30, [x29, #ARM_ARCH_REGS_LR]
 
-        ldr     lr, [sp], #(UREGS_SPSR_el1 - UREGS_LR) /* CPSR, PC, SP, LR */
+
+        ldp     x0, x1, [x29, #ARM_ARCH_REGS_GPR0]
+	ldp	x2, x3, [x29, #ARM_ARCH_REGS_GPR2]
+	ldp	x4, x5, [x29, #ARM_ARCH_REGS_GPR4]
+	ldp	x6, x7, [x29, #ARM_ARCH_REGS_GPR6]
+	ldp	x8, x9, [x29, #ARM_ARCH_REGS_GPR8]
+	ldp	x10, x11, [x29, #ARM_ARCH_REGS_GPR10]
+	ldp	x12, x13, [x29, #ARM_ARCH_REGS_GPR12]
+	ldp	x14, x15, [x29, #ARM_ARCH_REGS_GPR14]
+	ldp	x16, x17, [x29, #ARM_ARCH_REGS_GPR16]
+	ldp	x18, x19, [x29, #ARM_ARCH_REGS_GPR18]
+	ldp	x20, x21, [x29, #ARM_ARCH_REGS_GPR20]
+	ldp	x22, x23, [x29, #ARM_ARCH_REGS_GPR22]
+	ldp	x24, x25, [x29, #ARM_ARCH_REGS_GPR24]
+	ldp	x26, x27, [x29, #ARM_ARCH_REGS_GPR26]
+	ldp	x28, x29, [x29, #ARM_ARCH_REGS_GPR28]
+
 
         /*
          * Ensure any device/NC reads complete, in case we were interrupted

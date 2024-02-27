@@ -7,7 +7,7 @@
 
 static inline void arch_spin_lock(spinlock_t *lock)
 {
-	u32 cpu = aarch64_smp_id();
+	u32 cpu = smp_id();
 	unsigned long tmp;
 
 	__asm__ __volatile__(

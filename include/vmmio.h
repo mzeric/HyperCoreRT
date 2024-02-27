@@ -36,12 +36,20 @@ typedef struct {
     volatile long counter;
 } atomic_t;
 
-#define WARN_ON(p)                                                             \
-    do {                                                                       \
-        int real = (p);                                                        \
-        if (unlikely(real))                                                    \
-            vmm_warn(stringify(p));                                                    \
+#define WARN_ON(p)                                                                                 \
+    do {                                                                                           \
+        int real = (p);                                                                            \
+        if (unlikely(real))                                                                        \
+            vmm_warn(stringify(p));                                                                \
     } while (0)
 
+#define BUG_ON(p)                                                                                  \
+    do {                                                                                           \
+        int real = (p);                                                                            \
+        if (unlikely(real))                                                                        \
+            vmm_fatal(stringify(p));                                                               \
+    } while (0)
+
+#define ASSERT(p)   BUG_ON(!(p))
 #define vmm_exit(r) exit((r))
-#define __INIT__ __attribute__((section))
+#define __INIT__    __attribute__((section))

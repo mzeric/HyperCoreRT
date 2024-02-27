@@ -177,7 +177,7 @@ static inline void set_sctlr(unsigned long val)
 	asm volatile("isb");
 }
 
-static inline uint64_t aarch64_smp_id() {
+static inline uint64_t smp_id() {
 	unsigned long val;
 	asm volatile("mrs %0, tpidr_el2": "=r"(val));
 	return val;

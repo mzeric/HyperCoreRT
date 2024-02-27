@@ -104,7 +104,7 @@ int init_direct_mapping() {
                                        boot_pgtable,
                                        pages_direct_mapping_L1,
                                        pages_direct_mapping_L2);
-    ptw_test(boot_pgtable, PAGE_VIRT_OFFSET);
+    // ptw_test(boot_pgtable, PAGE_VIRT_OFFSET);
 
 }
 
@@ -296,18 +296,17 @@ int ptw_test(lpae_t *tbl_root, vaddr_t vir) {
     vmm_info("PTW for %p PASS\n", vir);
     return 0;
 }
-
+#include "tlsf.h"
 void test_page_alloc() {
 
 
 
     /* test kmalloc/kfree */
     void *k_ptr;
-    k_ptr = kmalloc(0x100000);
-    vmm_info("test kmalloc %p\n", k_ptr);
-    kfree(k_ptr);
-    k_ptr = kmalloc(0x10000);
-    vmm_info("test kmalloc %p\n", k_ptr);
+    dump_kmalloc_status();
+    k_ptr = kmalloc(0x1000);
+    vmm_info("test kmalloc -------- %p\n", k_ptr);
+
     dump_kmalloc_status();
     kfree(k_ptr);
     dump_kmalloc_status();

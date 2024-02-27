@@ -9,6 +9,7 @@
 #include "cpu_inline_asm.h"
 #include "execp.h"
 #include <errno.h>
+#include <string.h>
 
 uint64_t pte_offset(vaddr_t virt, uint8_t level) {
     uint64_t mask = (1UL << ARM_PT_LPAE_SHIFT) - 1;

@@ -44,3 +44,4 @@ uint64_t get_default_hcr_flags(void);
 void panic(char* msg);
 uint64_t get_default_hcr_flags(void);
 void switch_to_el1(void);
+void print_iss_detail(const union esr esr);

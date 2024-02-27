@@ -23,7 +23,6 @@ cc_library(
         "@platforms//cpu:aarch64": glob(
             [
                 "src/arch/aarch64/**/*.c",
-                # "src/arch/aarch64/**/*.S",
                 "src/arch/aarch64/**/*.h",
             ],
         ),
@@ -38,8 +37,12 @@ cc_library(
     hdrs = glob(["include/**/*.h"]),
     copts = [
         "-Wall",
-        # "-fpic",
-    ],
+        # "-Werror",
+        # "-ffreestanding",
+        "-fno-stack-protector",
+        "-Werror=implicit-function-declaration",
+        # "-fno-builtin",
+        ],
     includes = ["include/"],
     deps = [
         ":aarch64_as",
