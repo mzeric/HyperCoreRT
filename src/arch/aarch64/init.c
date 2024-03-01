@@ -214,10 +214,10 @@ int cpu_init(void) {
 void hyper_init_entry(void){
 
 
-    vmm_info("idle\n");
+    vmm_info("init\n");
     while (1) {
         wfi();
-        vmm_info("idle wakeup\n");
+        vmm_info("init wakeup\n");
     }
 }
 
@@ -228,7 +228,13 @@ void hyper_guard(void) {
         vmm_info("guard wakeup\n");
     }
 }
-
+void hyper_idle(void) {
+    vmm_info("idle\n");
+    // while (1) {
+        wfi();
+        vmm_info("idle wakeup\n");
+    // }
+}
 int init_hyper_low_level(void* args) {
 
     uint64_t el;
@@ -289,8 +295,9 @@ int init_hyper_low_level(void* args) {
     vmm_info("here\n");
 
     init_sched();
-    create_task("init", hyper_init_entry, 100);
-    create_task("guard", hyper_guard, 100);
+    create_task("init", hyper_init_entry, 10);
+    create_task("idle", hyper_idle, 10);
+    create_task("guard", hyper_guard, 10);
 
     timer_init();
 

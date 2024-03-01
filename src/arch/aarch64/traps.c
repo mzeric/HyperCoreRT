@@ -169,7 +169,7 @@ void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
 }
 
 void panic(char *msg) {
-    printf("panic.........\n");
+    printf("panic:%s .........\n", msg);
     vmm_exit(1);
 
 }
@@ -275,7 +275,7 @@ void do_hyper_sync(struct cpu_user_regs *regs, int magic) {
     const union esr esru = {.bits = regs->esr};
 
     print_iss_detail(esru);
-    panic("panic");
+    panic("hyper_sync");
 }
 
 void on_guest_excep_return(void ){

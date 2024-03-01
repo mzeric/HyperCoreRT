@@ -39,6 +39,7 @@ cc_library(
         "-Wall",
         # "-Werror",
         # "-ffreestanding",
+        "-march=armv8-a",
         "-fno-stack-protector",
         "-Werror=implicit-function-declaration",
         # "-fno-builtin",

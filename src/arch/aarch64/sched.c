@@ -7,16 +7,15 @@
 #include "system.h"
 #include "list.h"
 #include <string.h>
+#include "vmmlib.h"
+#include "sched_simple.h"
 
-struct list_head     g_task_list;
-static hyper_task_t *g_current_task = NULL;
-static size_t        g_task_id = 1;
-static spinlock_t    g_task_lock;
+
+hyper_task_t     *g_current_task = NULL;
+static size_t     g_task_id = 1;
+static spinlock_t g_task_lock;
 
 #define INIT_PRIORITY (100u)
-
-
-#define SPIN_UNLOCKED 0xffffffffUL
 
 void enable_local_irq() { asm volatile("msr daifset, #2"); }
 
@@ -28,15 +27,13 @@ void sched_preempt_disable() {}
 
 int save_irq_flags() {
     int v;
-    asm volatile("mrs %0, daif":"=r"(v));
+    asm volatile("mrs %0, daif" : "=r"(v));
     return v;
 }
 
-void restore_irq_flags(int flags) {
-    asm volatile("msr daif, %0"::"r"(flags));
-}
+void restore_irq_flags(int flags) { asm volatile("msr daif, %0" ::"r"(flags)); }
 
-void __lock arch_spin_lock(spinlock_t *lock) {
+void arch_spin_lock(spinlock_t *lock) {
     u32           cpu = smp_id();
     unsigned long tmp;
 
@@ -52,41 +49,32 @@ void __lock arch_spin_lock(spinlock_t *lock) {
                          : "cc", "memory");
 }
 
-void __lock arch_spin_unlock(spinlock_t *lock) {
+void arch_spin_unlock(spinlock_t *lock) {
     __asm__ __volatile__("	stlr	%w1, %0\n"
                          : "=Q"(lock->lock)
                          : "r"(SPIN_UNLOCKED)
                          : "memory");
 }
 
-#define arch_spin_lock_irqsave(lock, flags)                                                        \
-    do {                                                                                           \
-                                                                                                   \
-        flags = save_irq_flags();                                                                   \
-        disable_local_irq();                                                                       \
-        sched_preempt_disable();                                                                   \
-        arch_spin_lock(lock);                                                                      \
-    } while (0)
-
-#define arch_spin_unlock_irqrestore(lock, flags)                                                   \
-    do {                                                                                           \
-        arch_spin_unlock(lock);                                                                    \
-        sched_preempt_enable();                                                                    \
-        restore_irq_flags(flags);                                                                  \
-    } while (0)
-
 #define INIT_SPIN_LOCK(x) (x).lock = SPIN_UNLOCKED
 
 hyper_task_t *current_task() { return g_current_task; }
 
 void sink_task(void) {
-    vmm_info("task-%d sink\n", current_task());
-    while (1)
-        ;
+    hyper_task_t *task = current_task();
+    vmm_info("task(%p)-%d sink\n", task, task->id);
+    task->state = TASK_EXIT;
+    kfree(task);
+    g_current_task = NULL;
+
+    vmm_info("sink done\n");
+    while(1){
+        wfi();
+    }
 }
 
 int init_sched() {
-    INIT_LIST_HEAD(&g_task_list);
+    simple_scheduler_init();
     g_current_task = NULL;
     INIT_SPIN_LOCK(g_task_lock);
 
@@ -114,72 +102,26 @@ int create_task(const char *name, void *entry, int priority) {
 
     task->priority = priority;
     task->id = g_task_id++;
+    task->state = TASK_READY;
 
     if (name)
         memcpy(task->name, name, min(sizeof(task->name), strlen(name)));
 
-    list_add_tail(&(task->list), &g_task_list);
+    simple_scheduler_sched(task);
 
     return 0;
 }
 
-void insert_task_sorted(struct list_head *head, hyper_task_t *new_task) {
-    hyper_task_t     *pos;
-    struct list_head *p = head;
-
-    // 遍历链表，找到合适的插入位置
-    list_for_each_entry(pos, head, list) {
-        if (new_task->priority < pos->priority) {
-            // 找到了插入位置
-            break;
-        }
-        p = &pos->list;
-    }
-
-    // 插入到找到的位置之前（如果找到了比新任务priority大的任务），
-    // 或者插入到具有相同priority的最后一个任务之后
-    list_add_tail(&(new_task->list), p);
-}
-
-hyper_task_t *first_ready_task() {
-    return list_first_entry_or_null(&g_task_list, hyper_task_t, list);
-}
-
-
-hyper_task_t *pick_ready_task() {
-    hyper_task_t *task = first_ready_task();
-    if (!task) {
-        vmm_info("no task available\n");
-        return NULL;
-    }
-
-    list_del(&task->list);
-    task->list.next = NULL;
-    task->list.prev = NULL;
-    g_current_task = task;
-
-    return task;
-}
-
 void __dump_task(struct list_head *list) {
     hyper_task_t *task = NULL;
-    list_for_each_entry(task, &g_task_list, list) {
-        vmm_info("probe task:%p -> %p\n", task, task->list.next);
+    list_for_each_entry(task, &g_ready_list, list) {
         vmm_info("task:%s/%d p:%d\n", task->name, task->id, task->priority);
     }
 }
 
-void dump_task() { __dump_task(&g_task_list); }
+void dump_task() { __dump_task(&g_ready_list); }
 
-void sched_insert_task(hyper_task_t *task) {
-    if (!task)
-        return;
-    arch_spin_lock(&g_task_lock);
-    insert_task_sorted(&g_task_list, task);
-    arch_spin_unlock(&g_task_lock);
-}
-
-void __switch_to(hyper_task_t *cur, hyper_task_t *next, struct cpu_user_regs *irq_regs) {
+void __el2_switch_to(hyper_task_t *cur, hyper_task_t *next, struct cpu_user_regs *irq_regs) {
 
     vmm_info("switch %p -> %p\n", cur, next);
     if (cur) {
@@ -196,22 +138,23 @@ void __switch_to(hyper_task_t *cur, hyper_task_t *next, struct cpu_user_regs *ir
 void sched_yield(struct cpu_user_regs *irq_reg) {
 
     int flags;
-    arch_spin_lock_irqsave(&g_task_lock, flags);
 
+    dump_task();
     hyper_task_t *current = current_task();
-    hyper_task_t *task = pick_ready_task();
-    arch_spin_unlock(&g_task_lock);
+
+    arch_spin_lock_irqsave(&g_task_lock, flags);
+    hyper_task_t *task = simple_scheduler_next();
 
     if (!task) {
-        vmm_warn("task not found\n");
+        // vmm_warn("task not found\n");
         arch_spin_unlock_irqrestore(&g_task_lock, flags);
         return;
     }
 
-    sched_insert_task(current);
+    if (current && current->state != TASK_EXIT)
+        simple_scheduler_sched(current);
     arch_spin_unlock_irqrestore(&g_task_lock, flags);
 
     // vmm_info("switch to task:%d\n", task->id);
-    __switch_to(current, task, irq_reg);
-
+    __el2_switch_to(current, task, irq_reg);
 }
