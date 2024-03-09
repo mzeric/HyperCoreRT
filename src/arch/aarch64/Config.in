@@ -24,3 +24,18 @@ config CONFIG_PADDR_BITS
 config CONFIG_DTB_LOAD_PHYS_ADDR
     hex "dtb(Device Tree) load address without bootloader"
     default 0x40000000
+
+choice
+	prompt "Platform Board"
+	default CONFIG_BOARD_FVP_AEMVA
+	help
+		Target board
+
+config CONFIG_BOARD_QEMU_VIRT
+	bool "Qemu Virt"
+
+config CONFIG_BOARD_FVP_AEMVA
+	bool "FVP AEMvA"
+
+
+endchoice

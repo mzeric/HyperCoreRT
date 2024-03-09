@@ -9,17 +9,20 @@
 #include <string.h>
 #include "vmmlib.h"
 #include "sched_simple.h"
+#include "vcpu.h"
+#include <stdlib.h>
 
 
-hyper_task_t     *g_current_task = NULL;
-static size_t     g_task_id = 1;
-static spinlock_t g_task_lock;
+hyper_task_t               *g_current_task = NULL;
+static size_t               g_task_id = 1;
+static spinlock_t           g_task_lock;
+static struct cpu_user_regs g_empty_regs;
 
 #define INIT_PRIORITY (100u)
 
-void enable_local_irq() { asm volatile("msr daifset, #2"); }
+void enable_local_irq() { asm volatile("msr daifclr, #2"); }
 
-void disable_local_irq() { asm volatile("msr daifclr, #2"); }
+void disable_local_irq() { asm volatile("msr daifset, #2"); }
 
 void sched_preempt_enable() {}
 
@@ -31,7 +34,9 @@ int save_irq_flags() {
     return v;
 }
 
-void restore_irq_flags(int flags) { asm volatile("msr daif, %0" ::"r"(flags)); }
+void restore_irq_flags(int flags) {
+    asm volatile("msr daif, %0" ::"r"(flags));
+}
 
 void arch_spin_lock(spinlock_t *lock) {
     u32           cpu = smp_id();
@@ -56,9 +61,9 @@ void arch_spin_unlock(spinlock_t *lock) {
                          : "memory");
 }
 
-#define INIT_SPIN_LOCK(x) (x).lock = SPIN_UNLOCKED
-
 hyper_task_t *current_task() { return g_current_task; }
+
+void set_current(void *c) { g_current_task = c; }
 
 void sink_task(void) {
     hyper_task_t *task = current_task();
@@ -68,27 +73,43 @@ void sink_task(void) {
     g_current_task = NULL;
 
     vmm_info("sink done\n");
-    while(1){
-        wfi();
-    }
+    wfi();
+    while (1)
+        ;
 }
 
 int init_sched() {
     simple_scheduler_init();
     g_current_task = NULL;
     INIT_SPIN_LOCK(g_task_lock);
+    g_empty_regs.pc = 0;
 
     return 0;
 }
 
-int init_task_regs(hyper_task_t *task, void *entry) {
+int init_task_regs(hyper_task_t *task, void *entry, uintptr_t stack) {
+#if 0
     task->regs.sp = (uintptr_t)kmalloc(4096) + 4096;
     task->regs.pc = (uintptr_t)entry;
     task->regs.lr = (uintptr_t)sink_task;
     task->regs.cpsr = PSR_MODE64_EL2h;
+#else
+
+#ifdef EL2_TASK
+    task->vcpu->regs.sp = stack;// sp_el2
+#else
+    task->vcpu->arch.stack = stack; // sp_el1;
+#endif
+    task->vcpu->regs.pc = (uintptr_t)entry;
+    task->vcpu->regs.lr = (uintptr_t)sink_task;
+    task->vcpu->regs.cpsr = 0x3c5;
+
+#endif
+
 
     return 0;
 }
+    extern void *_guest_stack_end;
 
 int create_task(const char *name, void *entry, int priority) {
     hyper_task_t *task;
@@ -98,12 +119,21 @@ int create_task(const char *name, void *entry, int priority) {
     memset(task, 0, sizeof(hyper_task_t));
     INIT_LIST_HEAD(&task->list);
 
-    init_task_regs(task, entry);
+    vmm_debug("create vcpu:%p\n", task->vcpu);
 
     task->priority = priority;
     task->id = g_task_id++;
     task->state = TASK_READY;
-
+    task->vcpu = create_vcpu(1, 0);
+    if (task->vcpu == NULL) {
+        vmm_err("create vcpu failed\n");
+        return -1;
+    }
+    // uintptr_t stack_ptr = (uintptr_t)kmalloc(4096) + 4096;
+    uintptr_t stack_ptr = malloc(1024);
+    vmm_info("init task stack:%p\n", stack_ptr);
+    arch_vcpu_init(task->vcpu, entry, stack_ptr);
+    init_task_regs(task, entry, stack_ptr);
     if (name)
         memcpy(task->name, name, min(sizeof(task->name), strlen(name)));
 
@@ -121,6 +151,15 @@ void __dump_task(struct list_head *list) {
 
 void dump_task() { __dump_task(&g_ready_list); }
 
+void arch_regs_restore(struct cpu_user_regs *irq_regs, vcpu_t *vcpu) {
+
+    /* dont touch EL2 regs */
+    vcpu->regs.sp = irq_regs->sp;
+
+    *irq_regs = vcpu->regs;
+
+}
+
 void __el2_switch_to(hyper_task_t *cur, hyper_task_t *next, struct cpu_user_regs *irq_regs) {
 
     vmm_info("switch %p -> %p\n", cur, next);
@@ -128,10 +167,19 @@ void __el2_switch_to(hyper_task_t *cur, hyper_task_t *next, struct cpu_user_regs
         /* save cur frame to task info
             in the first switch cur is NULL
         */
-        cur->regs = *irq_regs;
+
+        // cur->regs = *irq_regs;
+
+        safe_printf("cur:%p vcpu:%p regs:%p\n", cur, cur->vcpu, irq_regs);
+        cur->vcpu->regs = *irq_regs;
+        vcpu_context_save(cur->vcpu);
     }
     /* restore next to irq_regs */
-    *irq_regs = next->regs;
+    // *irq_regs = next->regs;
+    arch_regs_restore(irq_regs, next->vcpu);
+    // *irq_regs = next->vcpu->regs;
+
+    vcpu_context_restore(next->vcpu);
     // memcpy(irq_regs, &next->regs, sizeof(struct cpu_user_regs));
 }
 
@@ -139,22 +187,24 @@ void sched_yield(struct cpu_user_regs *irq_reg) {
 
     int flags;
 
+    if(g_empty_regs.pc == 0)
+        g_empty_regs = *irq_reg;
     dump_task();
     hyper_task_t *current = current_task();
+    // arch_spin_lock_irqsave(&g_task_lock, flags);
 
-    arch_spin_lock_irqsave(&g_task_lock, flags);
     hyper_task_t *task = simple_scheduler_next();
 
     if (!task) {
         // vmm_warn("task not found\n");
-        arch_spin_unlock_irqrestore(&g_task_lock, flags);
+        // arch_spin_unlock_irqrestore(&g_task_lock, flags);
         return;
     }
 
     if (current && current->state != TASK_EXIT)
         simple_scheduler_sched(current);
-    arch_spin_unlock_irqrestore(&g_task_lock, flags);
-
-    // vmm_info("switch to task:%d\n", task->id);
+    // arch_spin_unlock_irqrestore(&g_task_lock, flags);
+    vmm_info("switch to task:%d[%s]\n", task->id, task->name);
     __el2_switch_to(current, task, irq_reg);
+
 }

@@ -1,19 +1,21 @@
 #include "vmmio.h"
 #include "processor.h"
 #include "cpu_inline_asm.h"
-#include "execp.h"
+#include "excep.h"
 #include "page.h"
 #include "system.h"
 #include "gicv3.h"
 #include "list.h"
 #include "mm.h"
 #include "sched.h"
+#include "timer.h"
 
 #include <stdio.h> /* just remove guest warning */
+#include <string.h>
 
 /*
 
-Execption entry (from ARM:D1.10 P1799):
+exception entry (from ARM:D1.10 P1799):
 
 On taking an exception to AArch64 state:
 1. The PE state is saved in the SPSR_ELx at the Exception level the exception is taken to. See Saved Program Status Registers (SPSRs) on page D1-1786.
@@ -49,18 +51,71 @@ void do_bad_mode(struct cpu_user_regs *regs, int is_compat) {
 
 }
 
-void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
+void dump_regs(struct cpu_user_regs *regs) {
+    uintptr_t *ptr = (uintptr_t*)regs;
 
-    int id = mrs(ICC_IAR1_EL1);
-    vmm_info("irq-%d, fired at %lx\n", id, mrs(cntpct_el0));
+    for(int i = 0; i< sizeof(struct cpu_user_regs)/ sizeof(uintptr_t); ++i) {
+        // vmm_printf("[%d] = %lx\n", i, ptr[i]);
+        vmm_printf("%d\n", i);
+    }
+}
+
+void irq_delay(int v) {
+    volatile int c = v;
+    u64 start = get_cycles();
+    while(get_cycles() < start + v);
+}
+
+void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
+    u64 sp;
+
+    int id;
+    safe_printf("do_irq_mode: %p\n", regs);
+
+    // asm("msr daifset, #2");
+    id = mrs(ICC_IAR1_EL1);
     int frq = mrs(cntfrq_el0);
-    msr(cntp_tval_el0, frq);
+    if(id == 26) {
+        msr(cnthp_tval_el2, frq * 2);
+    } else {
+        gicv3_eof_int(id);
+
+        vmm_warn("unsupport irq\n");
+        return;
+    }
+
+    vmm_info("irq-%d, fired at %lx - %f\n",
+             id,
+             mrs(cntpct_el0),
+             (float)get_cycles() / mrs(cntfrq_el0));
+    // irq_delay(0x1000000);
+
+
+    // msr(cntp_tval_el0, frq);
+    // msr(cntp_ctl_el0, 0);
+    // msr(cntp_ctl_el0, 1);
 
     // make_excep_task(regs);
+    // dump_regs(regs);
 
     sched_yield(regs);
+
     gicv3_eof_int(id);
+
     vmm_info("eret\n");
+}
+/* irq interrupt EL1 */
+void do_guest_irq(struct cpu_user_regs *regs) {
+
+    safe_printf("guest irq intd %p\n", regs);
+    do_irq_mode(regs, 0);
+    return;
+    int id = mrs(ICC_IAR1_EL1);
+
+
+    msr(cnthp_tval_el2, mrs(cntfrq_el0));
+    safe_printf("spsr_el2:%x\n", mrs(spsr_el2));
+    gicv3_eof_int(id);
 }
 
 uint64_t get_gva() { return mrs(FAR_EL2); }
@@ -135,18 +190,20 @@ void print_iss_detail(const union esr esr) {
     return 0;
 }
 
+
 void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
 
-    if(is_compat) {
+    safe_printf("reason: %d\n", is_compat);
+    if (is_compat == 1) {
         panic("Not support AArch32 Mode\n");
     }
     uint64_t elr = mrs(elr_el1); /* elr_el1 != elr_el2 */
     // uint64_t elr2 = mrs(elr_el2);
     // uint64_t spsr_el1 = mrs(spsr_el1);
 
-    vmm_debug("GUEST excep spsr:%x, elr:%x\n", regs->cpsr, elr);
-
-    const union esr esr = { .bits = regs->esr };
+    safe_printf("GUEST excep spsr:%x, elr_el1:%lx, elr_el2:%lx\n", regs->cpsr, elr, mrs(elr_el2));
+    safe_printf("esr_el1: %x, esr_el2:%x\n", mrs(esr_el1), mrs(esr_el2));
+    const union esr esr = { .bits = mrs(esr_el2) };
 
     vmm_info("Exception details: EC:0x%x, ISS:0x%x\n", esr.ec, esr.iss);
 
@@ -169,7 +226,7 @@ void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
 }
 
 void panic(char *msg) {
-    printf("panic:%s .........\n", msg);
+    safe_printf("panic:%s .........\n", msg);
     vmm_exit(1);
 
 }
@@ -181,22 +238,13 @@ void guest_entry(void) {
                  "isb\n\t" ::
                          : "memory");
 
-    uint64_t uart_addr = 0x09000000;
-    *(volatile uint64_t*)uart_addr = 'H';
-    *(volatile uint64_t*)uart_addr = 'E';
-    *(volatile uint64_t*)uart_addr = 'L';
-    *(volatile uint64_t*)uart_addr = 'L';
-    *(volatile uint64_t*)uart_addr = 'O';
+    safe_printf("Hello from GUEST\n");
+    safe_printf("current EL:%d\n", current_el());
 
-    printf(" from GUEST\n");
-    printf("current EL:%d\n", current_el());
-
-    size_t v = 1;
-    while (1) {
-        asm volatile("mov X3, %0" ::"r"(v) : "cc");
-        v++;
+    while (1){
+        wfi();
+        safe_printf("guest wakeup\n");
     }
-
 }
 
 uint64_t get_default_hcr_flags(void)
@@ -213,6 +261,8 @@ void switch_to_el1(void) {
 
     extern void *_guest_stack_end;
 
+    vmm_info("el1 sp:%p\n", &_guest_stack_end);
+
     msr(elr_el2, guest_entry);
     msr(sp_el1, &_guest_stack_end);
     msr(spsr_el1, 0);
@@ -222,15 +272,17 @@ void switch_to_el1(void) {
 
     /* init MPID/MPIDR */
     uint64_t tmp = mrs(midr_el1);
+#if 0
     msr(vpidr_el2, tmp);
     tmp = mrs(mpidr_el1);
     msr(vmpidr_el2, tmp);
     vmm_info("vpidr:%x\n", tmp);
 
     // disable co-processor traps
-#if 1
-    msr(cptr_el2, (3 << 12 | 0x3ff));
+    // msr(cptr_el2, (3 << 12 | 0x3ff));
+    msr(cptr_el2, 0);
     msr(hstr_el2, 0);
+#endif
     msr(cpacr_el1, (3 << 20)); /* Enable FP/SIMD at EL1 */
 
     /*
@@ -246,10 +298,10 @@ void switch_to_el1(void) {
                     SCTLR_EL1_SA_DIS | SCTLR_EL1_DCACHE_DIS |
                     SCTLR_EL1_ALIGN_DIS | SCTLR_EL1_MMU_DIS);
     msr(sctlr_el1, sctlr_val);
+    vmm_info("sctlr_el1: %lx\n", sctlr_val);
 
-#endif
-    uint64_t vector_el2 = mrs(vbar_el2);
-    msr(vbar_el1, vector_el2);
+    // uint64_t vector_el2 = mrs(vbar_el2);
+    // msr(vbar_el1, vector_el2);
 
 
     tmp = (SPSR_EL_DEBUG_MASK | SPSR_EL_SERR_MASK |\
@@ -258,23 +310,28 @@ void switch_to_el1(void) {
     vmm_debug("SPSR_EL2:%x\n", tmp);
     msr(spsr_el2, 0x3c5);
     asm volatile("eret\t\n":::"memory");
-    while(1);
+    while (1)
+        ;
 }
 
 void do_hyper_sync(struct cpu_user_regs *regs, int magic) {
     uint64_t esr = mrs(esr_el2);
     uint64_t far = mrs(far_el2);
     uint64_t elr = mrs(elr_el2);
-    vmm_info("spsr: 0x%x, esr: %x, far:%lx,elr:%x, lr:%x\n", regs->cpsr, esr,
+    int ec = esr >> 26;
+
+    safe_printf(" input reg:%p\n", regs);
+    safe_printf("hyper-sync, spsr: 0x%x, esr: %x, far:%lx,elr:%x, lr:%x\n", regs->cpsr, esr,
             far, elr, regs->lr);
 
-    int ec = esr >> 26;
-    vmm_info("Exception details: EC:0x%x, ISS:0x%x\n", ec, esr & 0x1ffffff);
+    safe_printf("stlr_el2:%lx\n", mrs(sctlr_el2));
+    safe_printf("Exception details: EC:0x%x, ISS:0x%x\n", ec, esr & 0x1ffffff);
 
-    vmm_info("spsr:%x, hcr_el2:%x\n", regs->cpsr, mrs(hcr_el2));
-    const union esr esru = {.bits = regs->esr};
+    safe_printf("spsr:%x, hcr_el2:%x\n", regs->cpsr, mrs(hcr_el2));
+    const union esr esru = {.bits = esr};
 
     print_iss_detail(esru);
+    while(1);
     panic("hyper_sync");
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 #include "list.h"
 #include "processor.h"
+#include "vcpu.h"
 
 
 enum task_state {
@@ -16,6 +17,7 @@ typedef struct hyper_task {
     char                 name[8];
     struct list_head     list;
     enum task_state      state;
+    vcpu_t              *vcpu;
 } hyper_task_t;
 
 typedef struct {
@@ -36,7 +38,9 @@ void restore_irq_flags(int flags);
 void sched_preempt_enable();
 void sched_preempt_disable();
 
-#define SPIN_UNLOCKED 0xBEAF
+// #define SPIN_UNLOCKED 0xBEAF
+
+#define SPIN_UNLOCKED 0u
 
 #define arch_spin_lock_irqsave(lock, flags)                                                        \
     do {                                                                                           \
@@ -53,3 +57,5 @@ void sched_preempt_disable();
         sched_preempt_enable();                                                                    \
         restore_irq_flags(flags);                                                                  \
     } while (0)
+
+#define INIT_SPIN_LOCK(x) (x).lock = SPIN_UNLOCKED

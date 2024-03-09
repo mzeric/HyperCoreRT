@@ -141,7 +141,13 @@ void vmm_timer_stop() {
 
     msr(COUNTER_TIMER_HP_CTL_REG, ctl);
 }
+void  phy_timer_stop() {
+    u64 ctl = mrs(cntp_ctl_el0);
+    ctl |= TIMER_CTRL_IT_MASK;
+    ctl &= ~TIMER_CTRL_ENABLE;
 
+    msr(cntp_ctl_el0, ctl);
+}
 void vmm_timer_fire(uint64_t val) {
     u64 ctl = mrs(COUNTER_TIMER_HP_CTL_REG);
     ctl |= TIMER_CTRL_ENABLE;
@@ -150,6 +156,15 @@ void vmm_timer_fire(uint64_t val) {
 
     msr(COUNTER_TIMER_HP_VAL_REG, val);
     msr(COUNTER_TIMER_HP_CTL_REG, ctl);
+}
+void phy_timer_fire(uint64_t val) {
+    u64 ctl =0;
+    ctl |= TIMER_CTRL_ENABLE;
+    ctl &= ~TIMER_CTRL_IT_MASK;
+
+
+    msr(cntp_tval_el0, val);
+    msr(cntp_ctl_el0, ctl);
 }
 
 // physical timer
@@ -198,19 +213,31 @@ void dealy(uint64_t c) {
         ;
 }
 
-void enable_timer_irq(void) { __asm__ __volatile__("msr DAIFClr, %0\n\t" : : "i"(3) : "memory"); }
+void enable_timer_irq(void) { __asm__ __volatile__("msr DAIFClr, %0\n\t" : : "i"(2) : "memory"); }
 
 #define wfi() asm volatile("wfi" ::: "memory")
 
 uint64_t get_cycles() { return mrs(cntpct_el0); }
 
 void timer_init() {
-    enable_timer_irq();
-
-    vmm_timer_stop();
 
     u64 frq = read_cntfrq();
-    write_cntp_tval(frq * 2);
-    msr(cntp_ctl_el0, 1);
+
+    enable_timer_irq();
+
+    // vmm_timer_stop();
+    // vmm_timer_fire(frq);
+
+    // phy_timer_fire(frq);
+    vmm_debug("timer frq: %x(%d)\n", frq, frq);
+    // msr(cntp_ctl_el0, 1);
+    // write_cntp_tval(frq);
+
+    /* fire hyper physical timer */
+    msr(cnthp_ctl_el2, 1);
+    msr(cnthp_tval_el2, frq);
+
+    // vmm_info("timer: %x t:%x, c:%x\n", mrs(cntpct_el0), mrs(cntp_tval_el0), mrs(cntp_cval_el0));
+    // vmm_info("timer: %x t:%x, c:%x\n", mrs(cntpct_el0), mrs(cntp_tval_el0), mrs(cntp_cval_el0));
 
 }

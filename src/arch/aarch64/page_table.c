@@ -7,7 +7,7 @@
 #include "vmmio.h"
 #include "mm.h"
 #include "cpu_inline_asm.h"
-#include "execp.h"
+#include "excep.h"
 #include <errno.h>
 #include <string.h>
 
@@ -76,8 +76,8 @@ int __build_vmm_three_level_page_table(vaddr_t virt_start, paddr_t phys_start, u
     lpae_t *entry = NULL;
     vaddr_t addr;
 
-    vmm_debug("page_tables: %p, %p, %p, %p\n", table_L0, table_L1, table_L2, table_L3);
-    vmm_debug("map from %p:%p size: %p\n", virt_start, phys_start, mem_size);
+    // vmm_debug("page_tables: %p, %p, %p, %p\n", table_L0, table_L1, table_L2, table_L3);
+    // vmm_debug("map from %p:%p size: %p\n", virt_start, phys_start, mem_size);
     build_hyper_table(table_L0, (vaddr_t)table_L1, virt_start, 0, attr);
     build_hyper_table(table_L1, (vaddr_t)table_L2, virt_start, 1, attr);
 
@@ -106,51 +106,6 @@ int __build_vmm_three_level_page_table(vaddr_t virt_start, paddr_t phys_start, u
         *entry = make_lpae_entry(addr, MT_NORMAL);
         entry->pt.xn = 0;
     } while (entry++, addr += ARM_PT_LEVEL_SIZE(3), addr < phys_end);
-
-    return 0;
-}
-
-int build_stage2_page_table(vaddr_t virt_start, paddr_t phys_start, uint64_t map_size,
-                            lpae_t *table_L0, lpae_t *table_L1, lpae_t *table_L2, lpae_t *table_L3,
-                            int attr) {
-
-    lpae_t *entry = NULL;
-    vaddr_t addr;
-
-    vmm_debug("map size: %lx from %p:%p\n", map_size, virt_start, phys_start);
-    build_s2_table(table_L0, (vaddr_t)table_L1, virt_start, 0, attr);
-    build_s2_table(table_L1, (vaddr_t)table_L2, virt_start, 1, attr);
-
-
-    addr = virt_start & (~(ARM_PT_LEVEL_SIZE(2) - 1));
-    entry = &table_L2[pte_offset(virt_start, 2)];
-    paddr_t next_tbl = vir_to_phy((vaddr_t)table_L3);
-
-    do {
-
-        *entry = make_p2m_table_entry(next_tbl, attr);
-        next_tbl += PAGE_SIZE;
-        addr += ARM_PT_LEVEL_SIZE(2);
-
-    } while (entry++, addr < (virt_start + map_size));
-
-
-    /* fill L3 */
-    paddr_t phy_start = virt_start;
-    paddr_t phy_end = phy_start + map_size;
-    entry = &table_L3[pte_offset(virt_start, 3)];
-
-    if (phy_start & 0xFFF) {
-        vmm_err("physical addr of level-3'page addr not aligned\n");
-        return -1;
-    }
-
-    do {
-
-        *entry = make_p2m_table_entry(phy_start, attr);
-        phy_start += ARM_PT_LEVEL_SIZE(3);
-
-    } while (entry++, phy_start < phy_end);
 
     return 0;
 }

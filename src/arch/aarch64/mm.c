@@ -8,7 +8,9 @@
 #include "vmmio.h"
 #include "mm.h"
 #include "cpu_inline_asm.h"
-#include "execp.h"
+#include "gicv3.h"
+#include "sys_reg.h"
+#include "excep.h"
 #include <errno.h>
 
 /*
@@ -65,6 +67,8 @@ DEFINE_PAGE_TABLES(stage2_L3_b, 1);
 
 lpae_t *g_kmap_l2_tbl = NULL; /* after page-allocatore setup, alloc by alloc_pages() */
 lpae_t *g_kmap_l3_tbl = NULL; /* for 4k table */
+
+DEFINE_PAGE_TABLE(huge_L0);
 
 DEFINE_PAGE_TABLE(pages_direct_mapping_L0);
 DEFINE_PAGE_TABLES(pages_direct_mapping_L1, 2); /* reprent 512G space*/
@@ -186,7 +190,13 @@ lpae_t *get_next_table(lpae_t *cur_level, vaddr_t addr, int level) {
 }
 
 void create_uart_guest_map() {
+
+#ifdef CONFIG_BOARD_QEMU_VIRT
     paddr_t mem_start = 0x09000000;
+#else
+    paddr_t mem_start = 0x1C090000;
+#endif
+
 #if 1
     int attr = p2m_ram_rw;
     build_s2_table(stage2_L0, (vaddr_t)stage2_L1, mem_start, 0, attr);
@@ -196,7 +206,11 @@ void create_uart_guest_map() {
     int idx = pte_offset(mem_start, 3);
     // stage2_L2_b[72] = make_p2m_table_entry(stage2_L3_b, 0);
     // stage2_L3_b[0] = make_p2m_table_entry(mem_start, 0);//
+#ifdef CONFIG_BOARD_QEMU_VIRT
     stage2_L3_b[idx].bits = 0x09000000 | 0x7ff;
+#else
+    stage2_L3_b[idx].bits = 0x1c090000 | 0x7ff;
+#endif
     // p[idx] = make_p2m_table_entry(0x40200000, p2m_mmio_direct_dev);
     vmm_info("uart index: %d %d %d %d\n",
              pte_offset(mem_start, 0),
@@ -209,58 +223,73 @@ void create_uart_guest_map() {
 
 void enable_stage2_traslation(lpae_t *table_root) {
 
-    build_stage2_page_table(MEM_VIRT_START,
-                            MEM_VIRT_START,
-                            (10 << 20),
-                            stage2_L0,
-                            stage2_L1,
-                            stage2_L2,
-                            stage2_L3,
-                            p2m_ram_rw);
+    struct stage2_mm_info s2_mm_info;
+    uint8_t pa_ps = mrs(ID_AA64MMFR0_EL1) & 0xFu;
 
-    create_uart_guest_map();
+    s2_setup_info(&s2_mm_info, pa_ps);
+    if(s2_mm_info.pa_size == 42)
+        vmm_fatal("pa_size %d unsupported\n", s2_mm_info.pa_size);
 
-    int      pa_bits = get_phys_bits(); /* max phys addr bits only support 48bits for now */
+    vmm_debug("pa-size:%d, ps:%d\n", s2_mm_info.pa_size, pa_ps);
+
+    stage2_map(&s2_mm_info,  MEM_VIRT_START, MEM_VIRT_START, (10 << 20));
+    // create_uart_guest_map();
+
+#ifdef CONFIG_BOARD_QEMU_VIRT
+    u64 pl011_data_reg = 0x09000000;
+#else
+    u64 pl011_data_reg = 0x1c090000;
+#endif
+    stage2_map(&s2_mm_info, pl011_data_reg, pl011_data_reg, 0x100);
+    stage2_map(&s2_mm_info, 0x09000000, 0x1c090000, 0x100);
     uint64_t val = VTCR_RES1 | VTCR_SH0_IS | VTCR_ORGN0_WBWA | VTCR_IRGN0_WBWA;
     val |= VTCR_TG0_4K;
-    val |= VTCR_PS(4) | VTCR_T0SZ(64 - pa_bits);
-    val |= VTCR_SL0(2); /* init lookup level = 0 */
+    val |= VTCR_PS(pa_ps) | VTCR_T0SZ(64 - s2_mm_info.pa_size);
+    val |= VTCR_SL0(2 - s2_mm_info.lookup_level); /* init lookup level */
 
     msr_sync(vtcr_el2, val);
 
 
-    uint64_t vttbr_val = (uint64_t)stage2_L0 & (~0xFFFUL);
+    uint64_t vttbr_val = ((uint64_t)vir_to_phy(s2_mm_info.root_table)) & (~0xFFFUL);
+
     vttbr_val |= (0ul << 48);
-
-// #define INIT_ZERO_ADDR
-#ifdef INIT_ZERO_ADDR
-    /* init zero paging to capture NULL pointer issue */
-    vmm_debug("stage_L2_b:%p\n", stage2_L2_b);
-
-    // stage2_L0[0].bits = 0;
-    // stage2_L1[0].bits = 0;
-    void *entry_p = stage2_L2_b;
-    stage2_L1[0].bits = (uint64_t)entry_p | 0x7ff;
-    size_t addr = stage2_L3_b;
-    for (int i = 0; i < 1; ++i) {
-        stage2_L2_b[i].bits = (uint64_t)addr | 0x7ff;
-        addr += PAGE_SIZE;
-    }
-
-    /* 0 addr */
-
-    stage2_L3_b[0].bits = 0x40100000 | 0x7ff;
-    vmm_info("%x\n", stage2_L1[1].bits);
-#endif
-
-    // dump_stage2_table(0);
     msr_sync(VTTBR_EL2, vttbr_val);
+
 }
+/*
+ * Memory types
+ */
+#if 0
+#define MT_DEVICE_NGNRNE	0
+#define MT_DEVICE_NGNRE		1
+#define MT_DEVICE_GRE		2
+#define MT_NORMAL_NC		3
+#define MT_NORMAL		4
 
+#define MEMORY_ATTRIBUTES	((0x00 << (MT_DEVICE_NGNRNE * 8)) |	\
+				(0x04 << (MT_DEVICE_NGNRE * 8))   |	\
+				(0x0c << (MT_DEVICE_GRE * 8))     |	\
+				(0x44 << (MT_NORMAL_NC * 8))      |	\
+				(UL(0xff) << (MT_NORMAL * 8)))
+#endif
+#define _IR1(attr, mt) (_AC(attr, ULL) << (((mt) * 8) - 32))
+extern void timer_init();
+
+// #define MT_NORMAL 4
 void enable_mmu(void *table) {
-    vmm_info("Enable paging\n");
+    // vmm_info("Enable paging\n");
 
+    safe_printf("mair_el2:%lx\n", mrs(mair_el2));
+
+
+    msr(mair_el2, 0xee0000ff440c0400);
+    // msr(mair_el2, 0x04440c0400);
     /* flush local TLB */
+    asm volatile("ic iallu\n\t"
+                 "tlbi alle2is\n\t"
+                 "dsb sy");
+
+
     asm volatile("dsb nshst\n\t"
                  "tlbi alle2\n\t"
                  "dsb nsh\n\t"
@@ -268,17 +297,21 @@ void enable_mmu(void *table) {
                      : "memory");
 
     msr_sync(TTBR0_EL2, table);
+    asm volatile("isb");
 
     uint64_t val = mrs(SCTLR_EL2);
-    vmm_debug("mmu: %x\n", val);
+    // vmm_debug("mmu: %x\n", val);
 
     /* enable mmu and data cache */
     val |= (SCTLR_Axx_ELx_M | SCTLR_Axx_ELx_C);
+    val &= ~(SCTLR_Axx_ELx_A);
+    asm volatile("dsb sy");
 
-    msr_sync(SCTLR_EL2, val);
+    msr(SCTLR_EL2, val);
+    asm volatile("isb");
+    asm volatile("dsb sy\n\t isb");
 
-    asm volatile("b 1f\n\t1:\n\t");
-    vmm_debug("enable mmu done\n");
+    vmm_info("enable mmu done\n");
 }
 
 int ptw_test(lpae_t *tbl_root, vaddr_t vir) {
@@ -389,34 +422,41 @@ void init_mm(void) {
 
 #endif
 
-    vmm_info("image size: 0x%x from %p -> %p\n", map_size, &_hyper_start, &_hyper_end);
+    // vmm_info("image size: 0x%x from %p -> %p\n", map_size, &_hyper_start, &_hyper_end);
 
-    asm volatile("msr sctlr_el1, xzr");
 
     uint32_t hcr_val = get_default_hcr_flags();
     // we only support AArch64 for now
     hcr_val |= (1 << 31);
     // hcr_val |= HCR_TGE;
-    vmm_info("hcr: %x\n", hcr_val);
+    // vmm_info("hcr: %x\n", hcr_val);
     msr(hcr_el2, hcr_val);
 
+    safe_printf("enable mmu\n");
     size_t phy_memory_size = CONFIG_PHY_MEM_SIZE;
 
     // map_size = phy_memory_size;
 
-    vmm_debug("dbug: from %lx %lx size:%lx\n", MEM_VIRT_START, MEM_VIRT_START, map_size);
+    // vmm_debug("dbug: from %lx %lx size:%lx\n", MEM_VIRT_START, MEM_VIRT_START, map_size);
 #ifdef CONFIG_HOST_USE_2MB_MAPPING
-    build_hyper_two_level_page_table(MEM_VIRT_START, MEM_VIRT_START, (uint64_t)map_size, MT_NORMAL);
+    build_hyper_two_level_page_table(MEM_VIRT_START, MEM_VIRT_START, (uint64_t)map_size, MT_NORMAL_WB);
 #else
     build_hyper_three_level_page_table(
-        MEM_VIRT_START, MEM_VIRT_START, (uint64_t)map_size, MT_NORMAL);
+        MEM_VIRT_START, MEM_VIRT_START, (uint64_t)map_size, 7);
 #endif
-    fix_map(0x09000000, 0x09000000, 0, MT_NORMAL);
-    /* setup stage2 */
-    enable_stage2_traslation(stage2_L0);
+#ifdef CONFIG_BOARD_FVP_AEMVA
+    fix_map(0x1c090000, 0x1c090000, 0, MT_DEVICE_nGnRnE);
+#else
+    fix_map(0x09000000, 0x09000000, 0, MT_DEVICE_nGnRnE);
+#endif
+
+    enable_mmu(boot_pgtable);
+
+
+    vmm_info("mmu enabled\n");
+
 
     // enable_mmu(pages_direct_mapping_L0);
-    enable_mmu(boot_pgtable);
 
 
     ret = ptw_test(boot_pgtable, MEM_VIRT_START + map_size - 1);
@@ -429,15 +469,19 @@ void init_mm(void) {
 
     test_page_alloc();
 
+    /* setup stage2 */
+    enable_stage2_traslation(stage2_L0);
+
     // u64 vp =  __vmalloc(0x4000);
     // u64 vp2 = __vmalloc(0x2000);
     // __vfree(vp, 0x4000);
     // u64 vp3 = __vmalloc(0x3000);
     // vmm_debug("_vmalloc get %lx, %lx %lx\n",vp, vp2, vp3);
 
-
+#ifdef CONFIG_BOARD_QEMU_VIRT
     void *uart_addr = ioremap_page(0x09000000, MT_NORMAL);
     *(u64*)uart_addr = '^';
     iounmap_page(uart_addr);
+#endif
 
 }

@@ -67,6 +67,13 @@ typedef enum {
     p2m_max_real_type,  /* Types after this won't be store in the p2m */
 } p2m_type_t;
 
+struct stage2_mm_info {
+    int     pa_size;
+    int     root_page_order;
+    int     lookup_level;
+    vaddr_t root_table;
+};
+
 extern void *_hyper_start, *_hyper_end;
 
 /*
@@ -103,7 +110,7 @@ extern void *_hyper_start, *_hyper_end;
 #define PAGE_VIRT_OFFSET DIRECT_MAPPING_VIRT_START
 
 #define VIRT_TO_PHYS(addr) (((u64)(addr)-PAGE_VIRT_OFFSET) + PAGE_PHYS_OFFSET)
-#define PHYS_TO_VIRT(addr) (((addr)-PAGE_PHYS_OFFSET) + PAGE_VIRT_OFFSET)
+#define PHYS_TO_VIRT(addr) (((u64)(addr)-PAGE_PHYS_OFFSET) + PAGE_VIRT_OFFSET)
 #define PAGE_VIR(pfn)     ((pfn) < 0 ? 0 : (PAGE_VIRT_OFFSET + ((pfn) << PAGE_SHIFT)))
 #define PAGE_PHY(pfn)      ((pfn) < 0 ? 0 : (PAGE_PHYS_OFFSET + ((pfn) << PAGE_SHIFT)))
 
@@ -134,7 +141,11 @@ int __ptw_map_4k_page(vaddr_t vir_addr, paddr_t phy_addr, lpae_t *cur_tbl, int l
                       int attr);
 int __ptw_unmap_4k_page(vaddr_t vir_addr, lpae_t *pre_tbl, int level);
 
+int  s2_setup_info(struct stage2_mm_info *info, int pa_regs);
 void build_s2_table(lpae_t *cur_table, vaddr_t next_table, vaddr_t virt, uint8_t level, int attr);
+int  stage2_map_4k(lpae_t *root, int start_level, vaddr_t vaddr, paddr_t paddr);
+int  stage2_map(struct stage2_mm_info *info, vaddr_t vaddr, paddr_t paddr,
+            uint64_t map_size);
 
 uint64_t pte_offset(vaddr_t virt, uint8_t level);
 
@@ -170,10 +181,10 @@ int init_kmalloc();
 uint64_t __vmalloc(size_t size);
 void     __vfree(uint64_t ptr, size_t size);
 void    *ioremap_page(paddr_t phy, int attr);
-void    *iounmap_page(vaddr_t vir);
+void     iounmap_page(vaddr_t vir);
 int      __kmap_one_page(vaddr_t vir, paddr_t phy, int attr);
 void dump_kmalloc_status();
 void page_summary();
 
 void *ioremap(paddr_t phy, int size, int attr);
-void *iounmap(vaddr_t vir, int size);
+void  iounmap(vaddr_t vir, int size);

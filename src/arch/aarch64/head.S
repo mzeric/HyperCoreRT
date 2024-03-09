@@ -1,5 +1,8 @@
 #include "version.h"
 #include "processor.h"
+#include "system.h"
+#include "asm_macros.h"
+
 #define MAX_HEADER_SPACE 32
 
 #define IFLAGS_D_BIT    8
@@ -25,6 +28,7 @@
 .global _hang_head
 .global _stack_top_
 .global on_guest_excep_return
+
 .section .text.vector
 
 _start:
@@ -107,24 +111,24 @@ _head:
          * 1508412 workaround.
          */
         dmb sy
-
+#if 0
 	sub     sp, sp,  #(UREGS_kernel_sizeof - UREGS_LR) /* CPSR, PC, SP, LR */
 
-        stp x28,x29, [sp, #-16]!
-        stp x26,x27, [sp, #-16]!
-        stp x24,x25, [sp, #-16]!
-        stp x22,x23, [sp, #-16]!
-        stp x20,x21, [sp, #-16]!
-        stp x18,x19, [sp, #-16]!
-        stp x16,x17, [sp, #-16]!
-        stp x14,x15, [sp, #-16]!
-        stp x12,x13, [sp, #-16]!
-        stp x10,x11, [sp, #-16]!
-        stp x8,x9, [sp, #-16]!
-        stp x6,x7, [sp, #-16]!
-        stp x4,x5, [sp, #-16]!
-        stp x2,x3, [sp, #-16]!
-        stp x0,x1, [sp, #-16]!
+        stp x28,x29, [sp], #-16
+        stp x26,x27, [sp], #-16
+        stp x24,x25, [sp], #-16
+        stp x22,x23, [sp], #-16
+        stp x20,x21, [sp], #-16
+        stp x18,x19, [sp], #-16
+        stp x16,x17, [sp], #-16
+        stp x14,x15, [sp], #-16
+        stp x12,x13, [sp], #-16
+        stp x10,x11, [sp], #-16
+        stp x8,x9, [sp], #-16
+        stp x6,x7, [sp], #-16
+        stp x4,x5, [sp], #-16
+        stp x2,x3, [sp], #-16
+        stp x0,x1, [sp], #-16
 
         .if \hyp == 1        /* Hypervisor mode */
 
@@ -146,11 +150,35 @@ _head:
         mrs     x22, spsr_el2
         mrs     x23, esr_el2
         stp     x22, x23, [x21]
+#else
 
+	sub	sp, sp, #ARM_ARCH_REGS_SIZE
+	stp	x28, x29, [sp, #ARM_ARCH_REGS_GPR28]	/* save GPR0-GPR29 */
+	stp	x26, x27, [sp, #ARM_ARCH_REGS_GPR26]
+	stp	x24, x25, [sp, #ARM_ARCH_REGS_GPR24]
+	stp	x22, x23, [sp, #ARM_ARCH_REGS_GPR22]
+	stp	x20, x21, [sp, #ARM_ARCH_REGS_GPR20]
+	stp	x18, x19, [sp, #ARM_ARCH_REGS_GPR18]
+	stp	x16, x17, [sp, #ARM_ARCH_REGS_GPR16]
+	stp	x14, x15, [sp, #ARM_ARCH_REGS_GPR14]
+	stp	x12, x13, [sp, #ARM_ARCH_REGS_GPR12]
+	stp	x10, x11, [sp, #ARM_ARCH_REGS_GPR10]
+	stp	x8, x9, [sp, #ARM_ARCH_REGS_GPR8]
+	stp	x6, x7, [sp, #ARM_ARCH_REGS_GPR6]
+	stp	x4, x5, [sp, #ARM_ARCH_REGS_GPR4]
+	stp	x2, x3, [sp, #ARM_ARCH_REGS_GPR2]
+	stp	x0, x1, [sp, #ARM_ARCH_REGS_GPR0]
+	add	x29, sp, #ARM_ARCH_REGS_SIZE		/* save LR, SP */
+	stp	x30, x29, [sp, #ARM_ARCH_REGS_LR]
+	mrs	x22, elr_el2				/* save ELR, SPSR */
+	mrs	x23, spsr_el2
+	stp	x22, x23, [sp, #ARM_ARCH_REGS_PC]
+
+#endif
         .endm
 return_from_trap:
-        msr     daifset, #IFLAGS___I_ /* Mask interrupts */
-
+       //msr     daifset, #IFLAGS___I_ /* Mask interrupts */
+#if 0
         ldr     x21, [sp, #UREGS_PC]            /* load ELR */
         ldr     x22, [sp, #UREGS_CPSR]          /* load SPSR */
         ldr     x23, [sp, #UREGS_SP_EL2]        /* load SP_el2 */
@@ -188,7 +216,30 @@ return_from_trap:
         alternative_else_nop_endif
          */
         dmb sy
+#else
+	ldp	x22, x23, [sp, #ARM_ARCH_REGS_PC]	/* load ELR, SPSR */
+	msr	elr_el2, x22
+	msr	spsr_el2, x23
+	ldp	x30, x28, [sp, #ARM_ARCH_REGS_LR]	/* load LR, SP */
+	mov	x29, sp
+	mov	sp, x28
+	ldp	x0, x1, [x29, #ARM_ARCH_REGS_GPR0]	/* load GPR0-GPR29 */
+	ldp	x2, x3, [x29, #ARM_ARCH_REGS_GPR2]
+	ldp	x4, x5, [x29, #ARM_ARCH_REGS_GPR4]
+	ldp	x6, x7, [x29, #ARM_ARCH_REGS_GPR6]
+	ldp	x8, x9, [x29, #ARM_ARCH_REGS_GPR8]
+	ldp	x10, x11, [x29, #ARM_ARCH_REGS_GPR10]
+	ldp	x12, x13, [x29, #ARM_ARCH_REGS_GPR12]
+	ldp	x14, x15, [x29, #ARM_ARCH_REGS_GPR14]
+	ldp	x16, x17, [x29, #ARM_ARCH_REGS_GPR16]
+	ldp	x18, x19, [x29, #ARM_ARCH_REGS_GPR18]
+	ldp	x20, x21, [x29, #ARM_ARCH_REGS_GPR20]
+	ldp	x22, x23, [x29, #ARM_ARCH_REGS_GPR22]
+	ldp	x24, x25, [x29, #ARM_ARCH_REGS_GPR24]
+	ldp	x26, x27, [x29, #ARM_ARCH_REGS_GPR26]
+	ldp	x28, x29, [x29, #ARM_ARCH_REGS_GPR28]
 
+#endif
         eret
         /*sb*/
 
@@ -257,20 +308,34 @@ hyp_sync:
                 call_excep do_hyper_sync
         excep_return
 hyp_irq:
+                #mov x25, #'E'
+                #mov x24, #0x1c090000
+                #str x25, [x24]
+                #eret
                 excep_entry
 		call_excep do_irq_mode, #1
                 excep_return
 hyp_error:
+
                 excep_entry
 		call_excep do_bad_mode, #1
                 excep_return
 
 guest_sync:
+                excep_entry 0
+		call_excep do_guest_exception 2
+                excep_return
 guest_irq:
+                excep_entry 0
+		call_excep do_guest_irq
+                excep_return
 guest_fiq_invalid:
+                excep_entry 0
+		call_excep do_guest_exception 4
+                excep_return
 guest_error:
                 excep_entry 0
-		call_excep do_guest_exception
+		call_excep do_guest_exception 5
                 excep_return
 
 guest_sync_compat:
@@ -280,4 +345,3 @@ guest_error_compat:
                 excep_entry 0
 		call_excep do_guest_exception, 1
                 excep_return
-

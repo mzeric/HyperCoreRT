@@ -8,7 +8,7 @@
 #include "mm.h"
 #include "tlsf.h"
 #include "bitmap.h"
-#include "execp.h"
+#include "excep.h"
 #include <string.h>
 
 #define TOTAL_PAGES (1024 * 1024) // 总共有1M个页 = 4G
@@ -139,6 +139,8 @@ int init_kmap() {
     int bitmap_bnr = (KMAP_VIRT_END - KMAP_VIRT_START) >> PAGE_SHIFT;
 
     g_vmalloc_bitmap = create_bitmap(KMAP_VIRT_START, PAGE_SIZE, bitmap_bnr);
+
+    return 0;
 }
 
 void fini_kmap() { destroy_bitmap(g_vmalloc_bitmap); }
@@ -156,6 +158,8 @@ int map_one_frame(vaddr_t vir, paddr_t phy, int attr) {
 
     if (phy & (PAGE_SIZE - 1))
         vmm_fatal("phy addr not aligned: %lx\n", phy);
+
+    return 0;
 }
 
 int __kmap_one_page(vaddr_t vir, paddr_t phy, int attr) {
@@ -173,7 +177,9 @@ int __kmap_pages(vaddr_t vir, paddr_t phy, int page_num, int attr) {
         phy += PAGE_SIZE;
     }
 
+    return 0;
 }
+
 void *ioremap_page(paddr_t phy, int attr) {
     u64 vaddr = __vmalloc(PAGE_SIZE);
     if (!vaddr)
@@ -197,13 +203,13 @@ void *ioremap(paddr_t phy, int size, int attr) {
     return (void *)vaddr;
 }
 
-void *iounmap_page(vaddr_t vir) {
+void iounmap_page(vaddr_t vir) {
     extern lpae_t boot_pgtable[];
 
     __ptw_unmap_4k_page(vir, boot_pgtable, 0);
 }
 
-void *iounmap(vaddr_t vir, int size) {
+void iounmap(vaddr_t vir, int size) {
     int page_num = round_up(size, PAGE_SIZE) >> PAGE_SHIFT;
     for (int i = 0; i < page_num; ++i) {
         iounmap_page(vir);

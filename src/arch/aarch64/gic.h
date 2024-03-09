@@ -3,41 +3,8 @@
 #define NR_GIC_LOCAL_IRQS  NR_LOCAL_IRQS
 #define NR_GIC_SGI         16
 
-#define GICD_CTLR       (0x000)
-#define GICD_TYPER      (0x004)
-#define GICD_IIDR       (0x008)
-#define GICD_IGROUPR    (0x080)
-#define GICD_IGROUPRN   (0x0FC)
-#define GICD_ISENABLER  (0x100)
-#define GICD_ISENABLERN (0x17C)
-#define GICD_ICENABLER  (0x180)
-#define GICD_ICENABLERN (0x1fC)
-#define GICD_ISPENDR    (0x200)
-#define GICD_ISPENDRN   (0x27C)
-#define GICD_ICPENDR    (0x280)
-#define GICD_ICPENDRN   (0x2FC)
-#define GICD_ISACTIVER  (0x300)
-#define GICD_ISACTIVERN (0x37C)
-#define GICD_ICACTIVER  (0x380)
-#define GICD_ICACTIVERN (0x3FC)
-#define GICD_IPRIORITYR (0x400)
-#define GICD_IPRIORITYRN (0x7F8)
-#define GICD_ITARGETSR  (0x800)
-#define GICD_ITARGETSR7 (0x81C)
-#define GICD_ITARGETSR8 (0x820)
-#define GICD_ITARGETSRN (0xBF8)
-#define GICD_ICFGR      (0xC00)
-#define GICD_ICFGR1     (0xC04)
-#define GICD_ICFGR2     (0xC08)
-#define GICD_ICFGRN     (0xCFC)
-#define GICD_NSACR      (0xE00)
-#define GICD_NSACRN     (0xEFC)
-#define GICD_SGIR       (0xF00)
-#define GICD_CPENDSGIR  (0xF10)
-#define GICD_CPENDSGIRN (0xF1C)
-#define GICD_SPENDSGIR  (0xF20)
-#define GICD_SPENDSGIRN (0xF2C)
-#define GICD_ICPIDR2    (0xFE8)
+#include "gic_common.h"
+#include "gic_common_private.h"
 
 #define GICD_SGI_TARGET_LIST_SHIFT   (24)
 #define GICD_SGI_TARGET_LIST_MASK    (0x3UL << GICD_SGI_TARGET_LIST_SHIFT)
@@ -52,6 +19,7 @@
 #define GICD_SGI_GROUP1              (1UL<<15)
 #define GICD_SGI_INTID_MASK          (0xFUL)
 
+/* for GICv2 */
 #define GICC_CTLR       (0x0000)
 #define GICC_PMR        (0x0004)
 #define GICC_BPR        (0x0008)

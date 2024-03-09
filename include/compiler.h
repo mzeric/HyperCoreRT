@@ -112,3 +112,22 @@ asm(
 #define sys_reg_CRn(id)	(((id) >> CRn_shift) & CRn_mask)
 #define sys_reg_CRm(id)	(((id) >> CRm_shift) & CRm_mask)
 #define sys_reg_Op2(id)	(((id) >> Op2_shift) & Op2_mask)
+
+#define BIT_32(nr)			(U(1) << (nr))
+#define BIT_64(nr)			(ULL(1) << (nr))
+
+#if defined(__ASSEMBLY__)
+# define   U(_x)	(_x)
+# define  UL(_x)	(_x)
+# define ULL(_x)	(_x)
+# define   L(_x)	(_x)
+# define  LL(_x)	(_x)
+#else
+# define  U_(_x)	(_x##U)
+# define   U(_x)	U_(_x)
+# define  UL(_x)	(_x##UL)
+# define ULL(_x)	(_x##ULL)
+# define   L(_x)	(_x##L)
+# define  LL(_x)	(_x##LL)
+
+#endif

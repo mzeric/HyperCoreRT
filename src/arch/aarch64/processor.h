@@ -4,6 +4,7 @@
 
 #ifndef __ASSEMBLY__
 #include "htypes.h"
+#include "list.h"
 
 #define __DECL_REG(n64, n32) union {            \
     uint64_t n64;                               \
@@ -11,6 +12,7 @@
 }
 
 /* On stack VCPU state */
+#if 1
 struct cpu_user_regs
 {
     /*
@@ -82,8 +84,23 @@ struct cpu_user_regs
     /* AArch64 guests only */
     uint64_t sp_el0;
     uint64_t sp_el1, elr_el1;
-
 };
+#else
+
+struct cpu_user_regs {
+	/* X0 - X29 */
+	u64 gpr[30];
+	/* Link Register (or X30) */
+	u64 lr;
+	/* Stack Pointer */
+	u64 sp;
+	/* Program Counter */
+	u64 pc;
+	/* PState/CPSR */
+	u64 cpsr;
+} __packed;
+#endif
+
 
 #define UREGS_LR            offsetof(struct cpu_user_regs, lr)
 #define UREGS_SP_L2         offsetof(struct cpu_user_regs, sp)
@@ -104,7 +121,7 @@ struct cpu_user_regs
 
 #define UREGS_SP_el0        (8 * 39)
 #define UREGS_SP_el1        (8 * 40)
-#define UREGS_kernel_sizeof (8 * 41)
+#define UREGS_kernel_sizeof (8 * 42)
 
 #endif /* __ASSEMBLY__ */
 
@@ -140,7 +157,7 @@ struct cpu_user_regs
 #define ARM_ARCH_REGS_GPR28				0xe0
 #define ARM_ARCH_REGS_GPR29				0xe8
 #define ARM_ARCH_REGS_GPR30				0xf0
-#define ARM_ARCH_REGS_GPR31				0xf8
+// #define ARM_ARCH_REGS_GPR31				0xf8
 #define ARM_ARCH_REGS_LR				0xf0
 #define ARM_ARCH_REGS_SP				0xf8
 #define ARM_ARCH_REGS_PC				0x100

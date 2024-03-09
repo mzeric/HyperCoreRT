@@ -1,13 +1,10 @@
 #include <sys/stat.h>
 #include <stdio.h>
+#include "autoconf.h"
+// #include "pl011.h"
 
-// #if defined(__aarch64__)
-enum {
-    UART_FR_RXFE = 0x10,
-    UART_FR_TXFF = 0x0,
-    UART0_ADDR = 0x09000000,
-};
-// #endif
+void pl011_putc(char c);
+
 
 #define UART_DR(baseaddr) (*(unsigned int*)(baseaddr))
 #define UART_FR(baseaddr) (*(((unsigned int*)(baseaddr)) + 6))
@@ -16,6 +13,7 @@ int _close(int file) { return -1; }
 
 int _fstat(int file, struct stat* st) {
     // st->st_mode = S_IFCHR;
+
     return 0;
 }
 
@@ -23,7 +21,8 @@ int _isatty(int file) { return 1; }
 
 int _lseek(int file, int ptr, int dir) { return 0; }
 
-int _open(const char* name, int flags, int mode) { return -1; }
+int _open(const char* name, int flags, int mode) {
+     return -1; }
 
 int _read(int file, char* ptr, int len) {
     int todo;
@@ -34,7 +33,7 @@ int _read(int file, char* ptr, int len) {
     if (len == 0) {
         return 0;
     }
-
+#if 0
     while (UART_FR(UART0_ADDR) & UART_FR_RXFE)
         ;
 
@@ -47,8 +46,21 @@ int _read(int file, char* ptr, int len) {
 
         *ptr++ = UART_DR(UART0_ADDR);
     }
-
+#endif
     return todo;
+}
+
+void __memset(void*src, int v, int cnt) {
+    char *p = src;
+    while (cnt-- > 0)
+        *p++ = v;
+}
+
+void __memmove(void *dst, void *src, int cnt) {
+    char *pd = dst;
+    char *ps = src;
+    for (int i = 0; i < cnt; ++i)
+        *pd ++ = *ps++;
 }
 
 caddr_t _sbrk(int incr) {
@@ -77,16 +89,15 @@ int _write(int file, char* ptr, int len) {
     int todo;
 
     for (todo = 0; todo < len; todo++) {
-        UART_DR(UART0_ADDR) = *ptr++;
+        // UART_DR(UART0_ADDR) = *ptr++;
+        pl011_putc(ptr[todo]);
     }
 
     return len;
 }
 
 void _exit(int status) {
-    printf("exit....\n");
-    while (1)
-        ;
+
 }
 
 int _kill(int pid, int sig) { return 0; }

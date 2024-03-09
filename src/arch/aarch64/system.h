@@ -1,6 +1,9 @@
 #pragma once
+
+#ifndef __ASSEMBLY__
 #include <inttypes.h>
 #include "cpu_inline_asm.h"
+#endif
 /*
  * SCTLR_EL1/SCTLR_EL2/SCTLR_EL3 bits definitions
  */
@@ -114,6 +117,20 @@
 #define SCTLR_EL1_ALIGN_DIS	(0 << 1)  /* Alignment check disabled         */
 #define SCTLR_EL1_MMU_DIS	(0)       /* MMU disabled                     */
 
+/*
+ * SCTLR_EL2 bits definitions
+ */
+#define SCTLR_EL2_RES1		(3 << 28 | 3 << 22 | 1 << 18 | 1 << 16 |\
+				 1 << 11 | 3 << 4)	    /* Reserved, RES1 */
+#define SCTLR_EL2_EE_LE		(0 << 25) /* Exception Little-endian          */
+#define SCTLR_EL2_WXN_DIS	(0 << 19) /* Write permission is not XN       */
+#define SCTLR_EL2_ICACHE_DIS	(0 << 12) /* Instruction cache disabled       */
+#define SCTLR_EL2_SA_DIS	(0 << 3)  /* Stack Alignment Check disabled   */
+#define SCTLR_EL2_DCACHE_DIS	(0 << 2)  /* Data cache disabled              */
+#define SCTLR_EL2_ALIGN_DIS	(0 << 1)  /* Alignment check disabled         */
+#define SCTLR_EL2_MMU_DIS	(0)       /* MMU disabled                     */
+
+
 #ifndef __ASSEMBLY__
 
 struct pt_regs;
@@ -177,10 +194,15 @@ static inline void set_sctlr(unsigned long val)
 	asm volatile("isb");
 }
 
-static inline uint64_t smp_id() {
+static inline uint64_t thread_id() {
 	unsigned long val;
 	asm volatile("mrs %0, tpidr_el2": "=r"(val));
 	return val;
 }
 
+static inline uint64_t smp_id() {
+    unsigned long val;
+    asm volatile("mrs %0, mpidr_el1" : "=r"(val));
+    return val & 0xff00ffffff;
+}
 #endif

@@ -17,4 +17,5 @@ config CONFIG_PHY_MEM_SIZE
 config CONFIG_HOST_USE_2MB_MAPPING
 	bool "use 2MB page-mapping for hypervisor self"
 	default False
+
 endmenu

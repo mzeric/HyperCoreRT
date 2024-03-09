@@ -5,6 +5,7 @@
 #include "htypes.h"
 #include "gic.h"
 #include "page.h"
+#include "sys_reg.h"
 /*
  * GIC System register assembly aliases picked from kernel
  */
@@ -21,7 +22,8 @@
 
 
 #define ICH_VSEIR_EL2             S3_4_C12_C9_4
-#define ICC_SRE_EL2               S3_4_C12_C9_5
+#define ICC_SRE_EL2_S               S3_4_C12_C9_5
+#define ICC_SRE_EL2           sys_reg(3, 4, 12, 9, 5)
 #define ICH_HCR_EL2               S3_4_C12_C11_0
 #define ICH_VTR_EL2               S3_4_C12_C11_1
 #define ICH_MISR_EL2              S3_4_C12_C11_2
@@ -29,6 +31,8 @@
 #define ICH_ELSR_EL2              S3_4_C12_C11_5
 #define ICH_VMCR_EL2              S3_4_C12_C11_7
 #define ZCR_EL2                   S3_4_C1_C2_0
+
+#define ICC_SRE_EL3		S3_6_C12_C12_5
 
 #define __LR0_EL2(x)              S3_4_C12_C12_ ## x
 #define __LR8_EL2(x)              S3_4_C12_C13_ ## x
@@ -103,6 +107,33 @@
 #define GICD_CTLR_ENABLE_G1A         (1U << 1)
 #define GICD_CTLR_ENABLE_G1          (1U << 0)
 #define GICD_IROUTER_SPI_MODE_ANY    (1UL << 31)
+
+
+/* GICD_CTLR bit definitions */
+#define CTLR_ENABLE_G1NS_SHIFT		1
+#define CTLR_ENABLE_G1S_SHIFT		2
+#define CTLR_ARE_S_SHIFT		4
+#define CTLR_ARE_NS_SHIFT		5
+#define CTLR_DS_SHIFT			6
+#define CTLR_E1NWF_SHIFT		7
+#define GICD_CTLR_RWP_SHIFT		31
+
+#define CTLR_ENABLE_G1NS_MASK		U(0x1)
+#define CTLR_ENABLE_G1S_MASK		U(0x1)
+#define CTLR_ARE_S_MASK			U(0x1)
+#define CTLR_ARE_NS_MASK		U(0x1)
+#define CTLR_DS_MASK			U(0x1)
+#define CTLR_E1NWF_MASK			U(0x1)
+#define GICD_CTLR_RWP_MASK		U(0x1)
+
+#define CTLR_ENABLE_G1NS_BIT		BIT_32(CTLR_ENABLE_G1NS_SHIFT)
+#define CTLR_ENABLE_G1S_BIT		BIT_32(CTLR_ENABLE_G1S_SHIFT)
+#define CTLR_ARE_S_BIT			BIT_32(CTLR_ARE_S_SHIFT)
+#define CTLR_ARE_NS_BIT			BIT_32(CTLR_ARE_NS_SHIFT)
+#define CTLR_DS_BIT			BIT_32(CTLR_DS_SHIFT)
+#define CTLR_E1NWF_BIT			BIT_32(CTLR_E1NWF_SHIFT)
+#define GICD_CTLR_RWP_BIT		BIT_32(GICD_CTLR_RWP_SHIFT)
+
 
 #define GICC_CTLR_EL1_EOImode_drop   (1U << 1)
 
@@ -282,5 +313,5 @@ struct rdist_region {
 #define GICD_RDIST_SGI_BASE 0x10000
 
 void init_gicv2(void *gicd_base, void* gicc_base);
-void init_gicv3(void *gicd_base, void* gicr_base);
+void init_gicv3(void *gicd_base, void *gicc_base, void* gicr_base);
 void gicv3_eof_int(int id);

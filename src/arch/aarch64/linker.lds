@@ -38,12 +38,16 @@ SECTIONS{
   }
 
   .bss :  {
-    . = ALIGN(4);
+    . = ALIGN(0x1000);
 		PROVIDE(_bss_start = .);
+    . = ALIGN(1<<CONFIG_PAGE_SHIFT);
+    PROVIDE(__per_cpu_start = .);
+    *(.bss.percpu)
+    PROVIDE(__per_cpu_data_end = .);
     *(.bss)
     *(.bss.*)
     *(COMMON)
-    . = ALIGN(4);
+    . = ALIGN(0x1000);
 
 		PROVIDE(_bss_end = .);
 
@@ -69,7 +73,7 @@ SECTIONS{
   .guest_test_stack :
   {
     PROVIDE(_guest_stack = .);
-    . += 0x10000;
+    . += 0x100000;
     PROVIDE(_guest_stack_end = .);
   }
   /DISCARD/ :

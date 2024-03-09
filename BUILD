@@ -13,6 +13,9 @@ cc_library(
         "-D__ASSEMBLY__",
         "-Wall",
     ],
+    deps = [
+        "//src/drivers:pl011",
+    ],
     includes = ["include/"],
     alwayslink = True,
 )
@@ -40,6 +43,7 @@ cc_library(
         # "-Werror",
         # "-ffreestanding",
         "-march=armv8-a",
+        "-fpic",
         "-fno-stack-protector",
         "-Werror=implicit-function-declaration",
         # "-fno-builtin",
@@ -63,6 +67,8 @@ cc_library(
         "-lc",  # need newlib here
         "-lgcc",
     ],
+    hdrs = glob(["include/**/*.h"]),
+    includes = ["include/"],
     alwayslink = True,
 )
 
@@ -126,7 +132,6 @@ genrule(
     name = "bin",
     srcs = [":hyper-elf"],
     outs = ["core.bin"],
-    # tools = [":dtb"],
     cmd = "$(OBJCOPY) -O binary $(location :hyper-elf) $@",
     toolchains = ["@bazel_tools//tools/cpp:current_cc_toolchain"],
 )
@@ -135,13 +140,6 @@ genrule(
     name = "dtb",
     srcs = ["hyper.dts"],
     outs = ["hyper.dtb"],
-    cmd = "dtc -O dtb $(location hyper.dts) > $@",
-)
-
-genrule(
-    name = "dtb2",
-    srcs = ["hyper.dts"],
-    outs = ["hyper2.dtb"],
     cmd = "dtc -O dtb $(location hyper.dts) > $@",
 )
 

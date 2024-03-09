@@ -1,5 +1,7 @@
 #pragma once
 #include "compiler.h"
+#include "htypes.h"
+#include "safe_printf.h"
 
 #define vmm_debug(fmt, arg...)                                                 \
     do {                                                                       \
@@ -32,9 +34,6 @@
         printf(fmt, ##arg);                                                                        \
     } while (0)
 
-typedef struct {
-    volatile long counter;
-} atomic_t;
 
 #define WARN_ON(p)                                                                                 \
     do {                                                                                           \
@@ -49,6 +48,7 @@ typedef struct {
         if (unlikely(real))                                                                        \
             vmm_fatal(stringify(p));                                                               \
     } while (0)
+
 
 #define ASSERT(p)   BUG_ON(!(p))
 #define vmm_exit(r) exit((r))
