@@ -1,3 +1,13 @@
+# Generated / build artifacts
+build/
+include/config/
+include/version.h
+.config
+.config.old
+
+# IDE
+.vscode/
+
 # Prerequisites
 *.d
 
@@ -6,11 +16,6 @@
 *.ko
 *.obj
 *.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
 
 # Precompiled Headers
 *.gch
@@ -22,7 +27,7 @@
 *.la
 *.lo
 
-# Shared objects (inc. Windows DLLs)
+# Shared objects
 *.dll
 *.so
 *.so.*
@@ -42,7 +47,7 @@
 *.idb
 *.pdb
 
-# Kernel Module Compile Results
+# Kernel module artifacts
 *.mod*
 *.cmd
 .tmp_versions/
@@ -51,5 +56,16 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-# bazel
+# Bazel
 bazel-*
+bazel
+
+# Generated device tree blobs
+*.dtb
+
+# Logs
+*.log
+
+# Binaries
+*.bin
+MODULE.bazel.lock

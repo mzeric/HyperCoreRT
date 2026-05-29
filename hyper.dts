@@ -1,0 +1,104 @@
+/dts-v1/;
+
+/ {
+    compatible = "hypervisor,platform";
+    #address-cells = <0x2>;
+    #size-cells = <0x2>;
+    interrupt-parent = <&gic>;
+
+    chosen {
+        bootargs = "console=ttyAMA0,115200 earlycon=pl011,0x09000000";
+        stdout-path = &uart0;
+    };
+
+    guest0 {
+        compatible = "hypervisor,guest";
+        #address-cells = <2>;
+        #size-cells = <2>;
+        guest-entry = <0x0 0x50200000>;
+        guest-dtb = <0x0 0x65000000>;
+        vcpu-count = <2>;
+        vcpu-mpidrs = <0x0 0x0 0x0 0x1>;
+        hyp-timer-ppi = <26>;
+        guest-virt-timer-ppi = <27>;
+
+        uart@9000000 {
+            compatible = "arm,pl011", "arm,primecell";
+            interrupts = <0 1 4>;
+            reg = <0x0 0x09000000 0x0 0x1000>;
+        };
+
+        memory@guest0 {
+            device_type = "memory";
+            reg = <0x0 0x40000000 0x0 0x20000000>;
+        };
+
+        vgic@8000000 {
+            compatible = "hypervisor,vgic-v3";
+            redistributor-stride = <0x0 0x20000>;
+            reg = <0x0 0x08000000 0 0x10000>,
+                  <0x0 0x080a0000 0 0xf60000>;
+        };
+    };
+
+    cpus {
+        #address-cells = <0x2>;
+        #size-cells = <0x0>;
+
+        cpu@0 {
+            device_type = "cpu";
+            compatible = "arm,armv8";
+            reg = <0x0 0x000>;
+            enable-method = "spin-table";
+            cpu-release-addr = <0xa 0x31040000>;
+        };
+        cpu@1 {
+            device_type = "cpu";
+            compatible = "arm,armv8";
+            reg = <0x0 0x100>;
+            enable-method = "spin-table";
+            cpu-release-addr = <0xa 0x31040000>;
+        };
+    };
+
+    memory@0 {
+        device_type = "memory";
+        reg = <0x0 0x80080000 0x0 0x80000000>; // 2G physical memory
+    };
+
+    reserved-memory {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+        reserved: device_memory@831000000 {
+        no-map;
+            reg = <0xb 0x00000000 0x1 0x00000000>;
+
+        };
+    };
+    gic: interrupt-controller@20400000 {
+        compatible = "arm,gic-v3";
+        #interrupt-cells = <3>;
+        #address-cells = <2>;
+        #size-cells = <2>;
+        interrupt-controller;
+        redistributor-stride = <0x0 0x20000>;	// 64kB stride
+        reg = <0x0 0x08000000 0 0x10000>,	// GICD
+              <0x0 0x080a0000 0 0x200000>;	// GICR
+    };
+
+    refclk200: refclk200mhz {
+        #clock-cells = <0>;
+        compatible = "fixed-clock";
+        clock-frequency = <0xbebc200>; //200MHz
+    };
+
+    uart0: uart@9000000 {
+        compatible = "arm,pl011", "arm,primecell";
+        clock-names = "uartclk", "apb_pclk";
+        clocks = <&refclk200 &refclk200>;
+        interrupts = <0 1 4>;
+        reg = <0x0 0x09000000 0x0 0x1000>;
+    };
+
+};

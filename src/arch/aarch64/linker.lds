@@ -1,0 +1,105 @@
+/*
+
+
+*/
+
+#include <config.h>
+
+OUTPUT_FORMAT("elf64-littleaarch64")
+OUTPUT_ARCH("aarch64")
+ENTRY(_start);
+
+SECTIONS{
+
+  . = CONFIG_ENTRY_ADDR;
+  _hyper_start = .;
+  .text :{
+    _text_start_ = .;
+    *(.text.vector)
+    *(.text.*)
+    *(.text)
+    _text_end_  = .;
+    . = ALIGN(4);
+  }
+  . = ALIGN(0x1000);
+
+  .rodata :
+  {
+    *(.rodata .rodata.*)
+    . = ALIGN(8);
+  }
+
+  .data :  {
+    *(.data)
+    *(.data.*)
+    *(.readmostly.data)
+    *(*.data)
+    . = ALIGN(8);
+  }
+
+  .init_array : {
+    . = ALIGN(8);
+    PROVIDE(__init_array_start = .);
+    KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
+    KEEP(*(.init_array))
+    PROVIDE(__init_array_end = .);
+    . = ALIGN(8);
+  }
+
+  .fini_array : {
+    . = ALIGN(8);
+    PROVIDE(__fini_array_start = .);
+    KEEP(*(SORT_BY_INIT_PRIORITY(.fini_array.*)))
+    KEEP(*(.fini_array))
+    PROVIDE(__fini_array_end = .);
+    . = ALIGN(8);
+  }
+
+  .bss :  {
+    . = ALIGN(0x1000);
+		PROVIDE(_bss_start = .);
+    . = ALIGN(1<<CONFIG_PAGE_SHIFT);
+    PROVIDE(__per_cpu_start = .);
+    *(.bss.percpu)
+    PROVIDE(__per_cpu_data_end = .);
+    *(.bss)
+    *(.bss.*)
+    *(COMMON)
+    . = ALIGN(0x1000);
+
+		PROVIDE(_bss_end = .);
+
+  }
+
+  /* reserse 1MB for printf/malloc */
+  .dymem (NOLOAD): {
+    . = ALIGN(8);
+    _heap_low_ = .;
+    . += 0x200000;
+    _heap_top_ = .;
+  }
+.=ALIGN(0x1000);
+	.hvc_stack :
+	{
+		PROVIDE(_hvc_stack_start = .);
+		. = . + (CONFIG_INT_STACK_SIZE * CONFIG_SMP_CPU_NUM);
+		. = ALIGN(8);
+		PROVIDE(_hvc_stack_end = .);
+	}
+
+
+  .guest_test_stack :
+  {
+    PROVIDE(_guest_stack = .);
+    . += 0x100000;
+    PROVIDE(_guest_stack_end = .);
+  }
+  /DISCARD/ :
+  {
+      *(.comment)
+      *(.eh_frame)
+      *(.note.GNU-stack)
+  }
+  . = ALIGN(4096);
+  _hyper_end = .;
+}

@@ -1,0 +1,48 @@
+#pragma once
+#include "list.h"
+#include "arch_regs.h"
+#include "vcpu.h"
+
+
+enum task_state {
+    TASK_RUNNING = 1,
+    TASK_PAUSE,
+    TASK_READY,
+    TASK_EXIT,
+};
+
+#define VCPU_MAX_PENDING_VIRQ 8
+typedef struct hyper_task {
+    struct cpu_user_regs regs;
+    int                  id;
+    int                  priority;
+    char                 name[8];
+    struct list_head     list;
+    enum task_state      state;
+    vcpu_t              *vcpu;
+
+    /* Simple pending vIRQ ring for this vcpu (PPIs + SGIs).
+       Flushed into ICH_LRn_EL2 by __el2_switch_to on context restore. */
+    int                  pending_virq[VCPU_MAX_PENDING_VIRQ];
+    int                  pending_virq_count;
+
+    /* Linux MPIDR affinity bits as advertised in dts cpu@N/reg */
+    uint64_t             mpidr;
+
+    /* Debug counters per vCPU */
+    uint64_t             trap_count;
+    uint64_t             irq_count;
+    uint64_t             switch_count;
+} hyper_task_t;
+
+
+
+int init_sched();
+int create_task(const char *name, void *entry, int priority);
+int create_task2(const char *name, void *entry, int priority);
+int create_task3(const char *name, void *__entry, int priority);
+
+void sched_yield(struct cpu_user_regs *irq_reg);
+hyper_task_t *current_task();
+
+void sched_yield2(struct cpu_user_regs *irq_reg);

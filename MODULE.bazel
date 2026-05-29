@@ -1,10 +1,9 @@
 module(
-    name = "hvcore",
+    name = "hypercore",
     version = "0.0.1",
 )
 
-bazel_dep(name = "platforms", version = "0.0.6")
-
-bazel_dep(name = "linaro_toolchain", version = "7.5")
-
-bazel_dep(name = "riscv64_toolchain", version= "10.2.0")
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "libfdt", version = "0.0.1")
+bazel_dep(name = "arm_toolchain_aarch64_none_elf", version= "10.3.1")
+bazel_dep(name = "rules_cc", version = "0.2.14")

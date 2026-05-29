@@ -1,0 +1,175 @@
+// /dts-v1/;
+
+// / {
+// 	interrupt-parent = <&gic>;
+// 	#size-cells = <0x02>;
+// 	#address-cells = <0x02>;
+
+// 	memory@52000000 {
+// 		reg = <0x00 0x52000000 0x00 0x20000000>;
+// 		device_type = "memory";
+// 	};
+
+// 	// pl011@9000000 {
+// 	// 	clock-names = "uartclk\0apb_pclk";
+// 	// 	clocks = <0x8000 0x8000>;
+// 	// 	interrupts = <0x00 0x01 0x04>;
+// 	// 	reg = <0x00 0x9000000 0x00 0x1000>;
+// 	// 	compatible = "arm,pl011\0arm,primecell";
+// 	// };
+
+// 	gic: interrupt-controller@8000000 {
+// 		compatible = "arm,gic-v3";
+// 		#interrupt-cells = <3>;
+// 		#address-cells = <0>;
+// 		interrupt-controller;
+// 		reg = <0x0 0x08000000 0 0x10000>,
+// 		      <0x0 0x080a0000 0 0xf60000>;
+// 	};
+
+// 	cpus {
+// 		#size-cells = <0x00>;
+// 		#address-cells = <0x01>;
+
+// 		cpu-map {
+
+// 			socket0 {
+
+// 				cluster0 {
+
+// 					core0 {
+// 						cpu = <0x8001>;
+// 					};
+// 				};
+// 			};
+// 		};
+
+// 		cpu@0 {
+// 			phandle = <0x8001>;
+// 			reg = <0x00>;
+// 			compatible = "arm,cortex-a57";
+// 			device_type = "cpu";
+// 		};
+// 	};
+
+// 	timer {
+// 		interrupts = <0x01 0x0d 0x104 0x01 0x0e 0x104 0x01 0x0b 0x104 0x01 0x0a 0x104>;
+// 		always-on;
+// 		compatible = "arm,armv8-timer\0arm,armv7-timer";
+// 	};
+
+// 	apb-pclk {
+// 		phandle = <0x8000>;
+// 		clock-output-names = "clk24mhz";
+// 		clock-frequency = <0x16e3600>;
+// 		#clock-cells = <0x00>;
+// 		compatible = "fixed-clock";
+// 	};
+
+// 	chosen {
+// 		bootargs = "earlycon=pl011,0x9000000 console=pl011,0x9000000 mem=256M root=/dev/ram initrd=0x66000000,0x800000 rdinit=/bin/sh";
+// 		stdout-path = "/pl011@9000000";
+// 	};
+// };
+
+
+/dts-v1/;
+
+/ {
+	interrupt-parent = <&gic>;
+	dma-coherent;
+	model = "linux,dummy-virt";
+	#size-cells = <0x02>;
+	#address-cells = <0x02>;
+	compatible = "linux,dummy-virt";
+
+	psci {
+		migrate = <0xc4000005>;
+		cpu_on = <0xc4000003>;
+		cpu_off = <0x84000002>;
+		cpu_suspend = <0xc4000001>;
+		method = "hvc";
+		compatible = "arm,psci-1.0\0arm,psci-0.2\0arm,psci";
+	};
+
+	memory@50200000 {
+		reg = <0x00 0x50200000 0x00 0x40000000>;
+		device_type = "memory";
+	};
+
+	pl011@9000000 {
+		clock-names = "uartclk\0apb_pclk";
+		clocks = <&apb_pclk &apb_pclk>;
+		interrupts = <0x00 0x01 0x04>;
+		reg = <0x00 0x9000000 0x00 0x1000>;
+		compatible = "arm,pl011\0arm,primecell";
+	};
+
+	gic: interrupt-controller@8000000 {
+		compatible = "arm,gic-v3";
+		#interrupt-cells = <3>;
+		#address-cells = <0>;
+		interrupt-controller;
+		reg = <0x0 0x08000000 0 0x10000>,
+		      <0x0 0x080a0000 0 0xf60000>;
+	};
+
+	cpus {
+		#size-cells = <0x00>;
+		#address-cells = <0x01>;
+
+		cpu-map {
+
+			socket0 {
+
+				cluster0 {
+
+					core0 {
+						cpu = <0x8002>;
+					};
+
+					core1 {
+						cpu = <0x8001>;
+					};
+				};
+			};
+		};
+
+		cpu@0 {
+			phandle = <0x8002>;
+			reg = <0x00>;
+			enable-method = "psci";
+			compatible = "arm,cortex-a53";
+			device_type = "cpu";
+		};
+
+		cpu@1 {
+			phandle = <0x8001>;
+			reg = <0x01>;
+			enable-method = "psci";
+			compatible = "arm,cortex-a53";
+			device_type = "cpu";
+		};
+	};
+
+	timer {
+		interrupts = <0x01 0x0d 0x304 0x01 0x0e 0x304 0x01 0x0b 0x304 0x01 0x0a 0x304>;
+		always-on;
+		compatible = "arm,armv8-timer\0arm,armv7-timer";
+	};
+
+	apb_pclk: apb-pclk {
+		phandle = <0x8000>;
+		clock-output-names = "clk24mhz";
+		clock-frequency = <0x16e3600>;
+		#clock-cells = <0x00>;
+		compatible = "fixed-clock";
+	};
+
+	chosen {
+		bootargs = "nokaslr earlycon=pl011,0x9000000 console=ttyAMA0,115200 mem=512M rdinit=/init";
+		linux,initrd-start = <0x0 0x66000000>;
+		linux,initrd-end   = <0x0 0x66211200>;
+		stdout-path = "/pl011@9000000";
+	};
+};
