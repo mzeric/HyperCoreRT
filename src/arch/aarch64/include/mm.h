@@ -25,6 +25,11 @@ extern void *_hyper_start, *_hyper_end;
 
 void init_mm(void);
 
+/* Saved MMU config for secondary CPU bring-up. */
+extern uint64_t g_saved_tcr_el2;
+extern void    *g_saved_ttbr0_el2;
+void secondary_enable_mmu(void);
+
 int          get_phys_bits();
 void         print_addr_idx(vaddr_t addr);
 paddr_t      __walk_page_table(lpae_t* cur_tbl_entry, vaddr_t addr, int level);

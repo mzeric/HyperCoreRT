@@ -8,3 +8,4 @@ typedef struct {
 
 uint64_t get_cycles();
 void hyp_timer_rearm(void);
+void enable_timer_irq(void);

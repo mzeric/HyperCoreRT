@@ -15,8 +15,10 @@ extern int g_log_level;
     do {                                                                 \
         if ((level) < LOG_LEVEL) break;          /* compile-time gate */ \
         if ((level) < g_log_level) break;        /* runtime gate */      \
+        log_lock();                                                      \
         safe_printf("[" tag "][%s:%d]" fmt "\n",                        \
                     __FUNCTION__, __LINE__, ##__VA_ARGS__);              \
+        log_unlock();                                                    \
     } while (0)
 
 #define hyper_debug(fmt, ...) _hyper_log(LOG_LEVEL_DEBUG, "Debug", fmt, ##__VA_ARGS__)

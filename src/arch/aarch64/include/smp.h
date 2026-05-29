@@ -1,15 +1,23 @@
 #pragma once
 
 #include "config.h"
+#include "inline_asm.h"
 #include <stdint.h>
 
 /* Maximum host physical CPUs */
 #define SMP_MAX_CPUS  CONFIG_SMP_CPU_NUM
 
+/* Fast linear CPU ID — read from TPIDR_EL2, set by head.S at boot. */
+static inline int cpu_id(void)
+{
+    return (int)thread_id();
+}
+
 /* CPU online states */
 enum cpu_state {
     CPU_OFFLINE = 0,
     CPU_ONLINE_PARKED,
+    CPU_ONLINE_SCHED,
 };
 
 /* Per-host-CPU descriptor */

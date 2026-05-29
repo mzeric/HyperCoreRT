@@ -1,5 +1,6 @@
 #include "log.h"
 #include "safe_printf.h"
+#include "spin_lock.h"
 #include <stdint.h>
 
 /* Global runtime log level — default matches compile-time threshold. */
@@ -7,6 +8,9 @@ int g_log_level = LOG_LEVEL;
 
 /* Output mode: default dual output (UART + ring buffer). */
 static unsigned int g_log_output = LOG_OUTPUT_BOTH;
+
+/* Spinlock protecting log output from concurrent pCPUs. */
+static spinlock_t g_log_lock = { .lock = SPIN_UNLOCKED };
 
 /* Ring buffer instance. */
 static struct {
@@ -56,6 +60,16 @@ void log_putchar(char ch)
         buf_write(ch);
     if (g_log_output & LOG_OUTPUT_UART)
         arch_putchar(ch);
+}
+
+void log_lock(void)
+{
+    arch_spin_lock(&g_log_lock);
+}
+
+void log_unlock(void)
+{
+    arch_spin_unlock(&g_log_lock);
 }
 
 void log_flush(void)

@@ -4,21 +4,34 @@
 #include "hyper_config.h"
 #include "vmio.h"
 #include "log.h"
+#include "mmu.h"
+#include "timer.h"
+#include "excep.h"
 
 #include <libfdt.h>
 #include <stdint.h>
 #include <string.h>
 
 /* ---- PSCI constants ---- */
-#define PSCI_FNID_CPU_ON  0xC4000003UL
-#define PSCI_RET_SUCCESS  0
-#define PSCI_RET_EINVAL   2
+#define PSCI_FNID_VERSION  0x84000000UL
+#define PSCI_FNID_CPU_ON   0xC4000003UL
+#define PSCI_RET_SUCCESS   0
 
 /* ---- Global state ---- */
 static struct host_cpu_desc host_cpus[SMP_MAX_CPUS];
 static int host_cpu_count;
 
-/* ---- PSCI SMC ---- */
+/* ---- PSCI SMC helpers ---- */
+static uint32_t psci_version(void)
+{
+    register uint64_t x0 __asm__("x0") = PSCI_FNID_VERSION;
+    __asm__ volatile("smc #0"
+                     : "+r"(x0)
+                     :
+                     : "memory");
+    return (uint32_t)x0;
+}
+
 static int psci_cpu_on(uint64_t target_mpidr, uint64_t entry, uint64_t context_id)
 {
     register uint64_t x0 __asm__("x0") = PSCI_FNID_CPU_ON;
@@ -72,8 +85,9 @@ static int parse_host_cpus(void *fdt)
 
         int parent = fdt_parent_offset(fdt, node);
         int na = 2; /* default #address-cells */
-        const fdt32_t *na_prop = fdt_getprop(fdt, parent, "#address-cells", &len);
-        if (na_prop && len >= 4)
+        int na_len;
+        const fdt32_t *na_prop = fdt_getprop(fdt, parent, "#address-cells", &na_len);
+        if (na_prop && na_len >= 4)
             na = fdt32_to_cpu(na_prop[0]);
 
         if (len < na * 4)
@@ -122,20 +136,36 @@ void secondary_start(void)
         while (1) { wfi(); }
     }
 
-    /* Per-pCPU GIC init using physical addresses (no MMU) */
+    /* Phase 0: per-pCPU GIC init using physical addresses (no MMU) */
+    uintptr_t gicr_base = hyper_config()->host_gic.gicr_base +
+                          (uintptr_t)cpu * hyper_config()->host_gic.gicr_stride;
     enable_sre_el2();
-    wakeup_gic(hyper_config()->host_gic.gicr_base);
-    gicv3_rd_init((void *)hyper_config()->host_gic.gicr_base);
+    wakeup_gic(gicr_base);
+    gicv3_rd_init((void *)gicr_base);
     gicv3_cpu_init(NULL);
     gic_vcpu_init_pcpu();
 
+    /* Phase 0.5: configure HCR_EL2 for stage-2 + trap routing. */
+    {
+        uint64_t hcr = get_default_hcr_flags();
+        hcr |= (1UL << 31);           /* RW: EL1 is AArch64 */
+        hcr |= (1UL << 42) | (1UL << 43) | (1UL << 45); /* TSC, TAC, TTLB */
+        asm volatile("msr hcr_el2, %0; isb" :: "r"(hcr));
+    }
+
+    /* Phase 1: enable MMU (reuse primary's page tables) */
+    secondary_enable_mmu();
+
+    /* Phase 2: enable EL2 physical timer for scheduling tick */
+    enable_timer_irq();
+    hyp_timer_rearm();
+
     /* Mark online */
-    host_cpus[cpu].state = CPU_ONLINE_PARKED;
-    __asm__ volatile("dmb ish" ::: "memory");
+    host_cpus[cpu].state = CPU_ONLINE_SCHED;
+    __asm__ volatile("dmb ish; sev" ::: "memory");
 
-    hyper_info("pcpu%d online, mpidr=0x%lx", cpu, mpidr);
+    hyper_info("pcpu%d online, mpidr=0x%lx, cpu_id=%d, entering scheduler", cpu, mpidr, cpu_id());
 
-    /* Park */
     while (1) {
         wfi();
     }
@@ -150,11 +180,20 @@ void smp_boot_secondaries(void *fdt)
 {
     parse_host_cpus(fdt);
 
+    /* Probe PSCI first */
+    uint32_t ver = psci_version();
+    hyper_info("psci version: 0x%x (major=%u minor=%u)",
+               ver, ver >> 16, ver & 0xffff);
+
     if (host_cpu_count <= 1) {
         hyper_info("no secondary cpus to boot");
         return;
     }
 
+    /* secondary_entry is linked at its physical address (identity mapping),
+     * so its virtual address == physical address in the current setup.
+     * PSCI CPU_ON expects a physical address.
+     */
     uint64_t entry_addr = (uint64_t)secondary_entry;
 
     for (int i = 0; i < host_cpu_count; i++) {
@@ -166,18 +205,19 @@ void smp_boot_secondaries(void *fdt)
 
         int ret = psci_cpu_on(host_cpus[i].mpidr, entry_addr, 0);
         if (ret != PSCI_RET_SUCCESS) {
-            hyper_warn("psci cpu_on failed: %d", ret);
+            hyper_warn("psci cpu_on failed: %d (0x%lx)", ret, (uint64_t)ret);
             continue;
         }
 
-        /* Wait for secondary to come online */
+        /* Wait for secondary to come online and enter scheduler.
+         * yield is safe for QEMU TCG; wfe may not wake on sev. */
         int timeout = 100000;
-        while (host_cpus[i].state != CPU_ONLINE_PARKED && timeout-- > 0)
+        while (host_cpus[i].state < CPU_ONLINE_SCHED && timeout-- > 0)
             __asm__ volatile("yield" ::: "memory");
 
         if (timeout <= 0)
             hyper_warn("pcpu%d boot timeout", i);
     }
 
-    hyper_info("all secondary cpus parked");
+    hyper_info("all secondary cpus in scheduler mode");
 }

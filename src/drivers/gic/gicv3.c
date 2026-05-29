@@ -7,6 +7,7 @@
 #include "gicv3_private.h"
 #include "emul_gic.h"
 #include "hyper_config.h"
+#include "smp.h"
 
 void init_gicv2(void *gicd_base, void *gicc_base) {
     // hyper_info("gic probe: typer:%x", readl(gicd_base + 0x8));
@@ -97,11 +98,11 @@ int gicv3_rd_init(void *gicr_base) {
     gicr_write_isenabler0((uintptr_t)gicr_base + 4, ~0x0u);
 
 
-#if 0
-    /* Configure SGIs/PPIs as non-secure Group-1 */
-    gicr_write_igroupr0(gicr_base, ~0u);
-    gicr_write_igroupr0(gicr_base + 4, ~0u);
-#endif
+    /* Configure SGIs/PPIs as non-secure Group-1.
+     * Without this, PPIs default to Group 0 and ICC_IGRPEN1_EL1=1
+     * (Group-1 only) will never deliver them. */
+    gicr_write_igroupr0((uintptr_t)gicr_base, ~0u);
+    gicr_write_igroupr0((uintptr_t)gicr_base + 4, ~0u);
     return 0;
 }
 
@@ -135,15 +136,12 @@ void gicv3_dist_init(void *gicd_base) {
 }
 
 void gicv3_reenable_hyp_timer_ppi(void) {
-    mmio_write_32(GICR_SGI_BASE_FIXMAP + 0x100, 1u << hyper_config()->timer.hyp_timer_ppi);
+    uintptr_t sgi_base = GICR_SGI_BASE_FIXMAP + ((uintptr_t)cpu_id() * 0x1000UL);
+    mmio_write_32(sgi_base + 0x100, 1u << hyper_config()->timer.hyp_timer_ppi);
 }
 
 void init_gicv3(void *gicd_base, void *gicc_base, void *gicr_base) {
-    // hyper_info("gic probe(dist): id:%x, typer:%lx", readl(gicd_base + GICD_IIDR), readl(gicd_base
-    // + GICD_TYPER));
-
     (void)readl(gicd_base + GICD_CTLR);
-    // hyper_info("ctlr: %x, pwrr: %x", val, readl(gicr_base + 0x24));
     if (current_el() == 2)
         enable_sre_el2();
 

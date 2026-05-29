@@ -53,9 +53,17 @@ _head:
 	 * Primary CPU (cpu0) entry.  Only CPU0 reaches here via QEMU
 	 * -kernel load.  Secondary CPUs are started via PSCI CPU_ON
 	 * and enter at secondary_entry directly.
+	 *
+	 * x0 = DTB physical address (from QEMU boot protocol).
+	 * Save in x19 before clobbering x0 with stack pointer.
 	 */
+	mov	x19, x0
 	ldr	x0, =_hvc_stack_end
 	mov	sp, x0
+	mov	x0, x19
+
+	/* Primary CPU = linear ID 0 */
+	msr	tpidr_el2, xzr
 
 	bl _reset
 	b .
@@ -77,14 +85,16 @@ secondary_entry:
 	cmp	x0, #0x0
 	b.eq	1f
 	add	x2, x2, #1
-	cmp	x0, #0x100
+	cmp	x0, #0x1
 	b.eq	1f
 	/* Unknown CPU — hang */
 	b	.
 
 1:
-	/* x2 = linear cpu_id (0-based).
-	 * Select per-CPU stack: top = _hvc_stack_start + per_cpu_size * (cpu_id + 1)
+	/* x2 = linear cpu_id (0-based). Store in TPIDR_EL2 for cpu_id(). */
+	msr	tpidr_el2, x2
+
+	/* Select per-CPU stack: top = _hvc_stack_start + per_cpu_size * (cpu_id + 1)
 	 * per_cpu_size = total_region / CONFIG_SMP_CPU_NUM
 	 */
 	ldr	x3, =_hvc_stack_start

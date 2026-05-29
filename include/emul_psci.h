@@ -65,13 +65,16 @@ static bool psci_configured_mpidr(u64 cpu_id, u64 *mpidr)
 
 static bool psci_task_exists(u64 mpidr)
 {
-	extern hyper_task_t *g_current_task;
 	extern struct list_head g_ready_list;
+	extern hyper_task_t *g_running[CONFIG_SMP_CPU_NUM];
 	hyper_task_t *iter;
 
 	mpidr = psci_mpidr_affinity(mpidr);
-	if (g_current_task && psci_mpidr_affinity(g_current_task->mpidr) == mpidr)
-		return true;
+	/* Check all pCPUs' running tasks */
+	for (int i = 0; i < CONFIG_SMP_CPU_NUM; i++) {
+		if (g_running[i] && psci_mpidr_affinity(g_running[i]->mpidr) == mpidr)
+			return true;
+	}
 	list_for_each_entry(iter, &g_ready_list, list) {
 		if (psci_mpidr_affinity(iter->mpidr) == mpidr)
 			return true;
@@ -119,6 +122,17 @@ static unsigned long psci_vcpu_on(/*vcpu_t *source_vcpu, */struct cpu_user_regs 
 	}
 
 	new_task->mpidr = target_mpidr;
+	/* Pin vCPU to matching pCPU by guest vcpu index */
+	{
+		struct hyper_config *cfg = hyper_config();
+		new_task->pcpu_affinity = -1;
+		for (u32 i = 0; i < cfg->guest.vcpu_count; i++) {
+			if (psci_mpidr_affinity(cfg->guest.vcpu_mpidr[i]) == target_mpidr) {
+				new_task->pcpu_affinity = (int)i;
+				break;
+			}
+		}
+	}
 	if (new_task->vcpu) {
 		new_task->vcpu->arch.vmpidr = 0x80000000ULL | target_mpidr;
 		uint64_t primary_vbar;

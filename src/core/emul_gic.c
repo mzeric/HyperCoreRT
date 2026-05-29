@@ -5,8 +5,6 @@
 #include "src/drivers/gic/gicv3.h"
 #include "sys_reg.h"
 
-extern hyper_task_t *g_current_task;
-
 /* Bit layout per ARM ARM D13.4.x for ICH_LR<n>_EL2 (64-bit). */
 #define ICH_LR_VINTID(v)   ((u64)((v) & 0xffffffffULL))
 #define ICH_LR_PINTID(p)   (((u64)((p) & 0x3ffULL)) << 32)
@@ -220,7 +218,7 @@ int gic_vcpu_send_sgi(const struct gic_vcpu_sgi *sgi) {
 	hyper_task_t *source = current_task();
 
 	if (sgi->irm) {
-		delivered += gic_emul_send_sgi_to_task(g_current_task, source, sgi->intid);
+		delivered += gic_emul_send_sgi_to_task(current_task(), source, sgi->intid);
 		hyper_task_t *target;
 		list_for_each_entry(target, &g_ready_list, list)
 			delivered += gic_emul_send_sgi_to_task(target, source, sgi->intid);
@@ -304,8 +302,12 @@ void gic_vcpu_flush_lr(hyper_task_t *task) {
 
 hyper_task_t *find_task_by_mpidr(uint64_t mpidr) {
 	mpidr = gic_emul_mpidr_affinity(mpidr);
-	if (g_current_task && gic_emul_mpidr_affinity(g_current_task->mpidr) == mpidr)
-		return g_current_task;
+	/* Check all pCPUs' running tasks */
+	for (int i = 0; i < CONFIG_SMP_CPU_NUM; i++) {
+		if (g_running[i] && gic_emul_mpidr_affinity(g_running[i]->mpidr) == mpidr)
+			return g_running[i];
+	}
+	/* Check ready list */
 	hyper_task_t *t;
 	list_for_each_entry(t, &g_ready_list, list) {
 		if (gic_emul_mpidr_affinity(t->mpidr) == mpidr)

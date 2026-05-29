@@ -14,12 +14,12 @@ struct test_init_fini{
 
 };
 
-int c_main(void) {
+int c_main(uintptr_t dtb_phys) {
 
     cxx_run_global_ctors();
     safe_printf("modern cpp smoke: %d\n", modern_cpp_smoke());
     safe_printf("modern cpp global ctor: %d\n", modern_cpp_global_ctor_smoke());
-    init_hyper_low_level(NULL);
+    init_hyper_low_level((void *)dtb_phys);
     while(1);
 
 
@@ -39,8 +39,6 @@ int c_main(void) {
 #warning "unknown arch"
 #endif
 
-void _reset(uint64_t arg) {
-    safe_printf("stack %p\n", arg);
-
-    c_main();
+void _reset(uint64_t dtb_phys) {
+    c_main((uintptr_t)dtb_phys);
 }

@@ -19,6 +19,7 @@
 #include "src/drivers/pl011/pl011.h"
 #include "emul_uart.h"
 #include "sys_reg.h"
+#include "smp.h"
 
 #include <stdio.h> /* just remove guest warning */
 #include <string.h>
@@ -157,11 +158,9 @@ void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
         gicv3_eof_int(hirq_no);
     } else {
         gicv3_eof_int(hirq_no);
-        hyper_warn("[vCPU%d] unsupport irq: %d", current_task()->id, hirq_no);
+        hyper_warn("[pCPU%d] unsupported irq: %d current=%p", cpu_id(), hirq_no, current_task());
 
-        // DEBUG
-        while(1);
-
+        /* Don't hang — just return and let the CPU continue */
         return;
     }
 }
@@ -301,13 +300,6 @@ void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
 
     if (current_task())
         current_task()->trap_count++;
-
-    /* Only log non-SGI traps; EC:0x18 is too frequent and the UART output
-       itself causes timing issues between vCPUs. */
-    if (esr.ec != HSR_EC_SYSREG &&
-        !(esr.ec == HSR_EC_DATA_ABORT_LOWER_EL && is_uart_ipa(get_ipa())))
-        hyper_info("[vCPU%d] Exception details: EC:0x%x, ISS:0x%x",
-                   current_task() ? current_task()->id : -1, esr.ec, esr.iss);
 
     switch (esr.ec) {
     case HSR_EC_SYSREG:

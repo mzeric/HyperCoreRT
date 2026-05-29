@@ -25,6 +25,7 @@
 #include "emul_gic.h"
 #include "hyper_config.h"
 #include "smp.h"
+#include "percpu.h"
 
 #include <ioremap.h>
 
@@ -753,7 +754,7 @@ int init_el3() {
     return 0;
 }
 
-void switch_to_el2(void *stack, void *entry) {
+void switch_to_el2(void *stack, void *entry, void *dtb_arg) {
     asm volatile("msr cptr_el3, xzr");
 
     msr(cptr_el2, CPTR_EL2_RES1);
@@ -805,7 +806,11 @@ void switch_to_el2(void *stack, void *entry) {
 			SPSR_EL_M_AARCH64 | SPSR_EL_M_EL2H);
     msr(spsr_el3, tmp);
     msr(elr_el3, entry);
-    asm volatile("eret\t\n":::"memory");
+    /* Move dtb_arg into x0 so __init_hyper_low_level receives it
+     * as the first argument after ERET.  ERET does not modify GPRs. */
+    asm volatile("mov x0, %0\n\t"
+                 "eret\n"
+                 :: "r"(dtb_arg) : "memory");
     while(1);
 }
 
@@ -880,7 +885,7 @@ int init_hyper_low_level(void *args) {
         safe_printf("switch to EL2...\n");
         isb();
         arch_mb();
-        switch_to_el2(NULL, __init_hyper_low_level);
+        switch_to_el2(NULL, __init_hyper_low_level, args);
         // __armv8_switch_to_el2(__init_hyper_low_level, 1);
         // asm volatile("msr ");
     }
@@ -898,8 +903,9 @@ int init_hyper_low_level(void *args) {
 int __init_hyper_low_level(void *args) {
 
     uint64_t el = 0;
+    uintptr_t dtb_phys = (uintptr_t)args;
     safe_printf("init low level %x\n", readl((void *)0x80010000));
-    load_dtb(CONFIG_DTB_LOAD_PHYS_ADDR, &g_hyper_config);
+    load_dtb(dtb_phys, &g_hyper_config);
     write_sysreg(&__hyp_vectors, vbar_el2);
 
     // zero_bss();
@@ -909,6 +915,8 @@ int __init_hyper_low_level(void *args) {
 
     init_mm();
     safe_printf("mmu-init done\n");
+
+    init_percpu_area();
 
 #if 0
     /* for memset */
@@ -952,7 +960,10 @@ int __init_hyper_low_level(void *args) {
     iounmap((vaddr_t)gicr_base, g_hyper_config.host_gic.gicr_size);
 
     /* Boot secondary physical CPUs via PSCI */
-    smp_boot_secondaries((void *)CONFIG_DTB_LOAD_PHYS_ADDR);
+    /* DTB can be larger than a page (QEMU expands it to ~24KB), map enough */
+    void *fdt_mapped = (void *)ioremap(dtb_phys, 0x10000, MT_NORMAL);
+    smp_boot_secondaries(fdt_mapped);
+    iounmap((vaddr_t)fdt_mapped, 0x10000);
 
     init_sched();
     init_emul_dev();

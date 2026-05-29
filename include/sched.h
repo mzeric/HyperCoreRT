@@ -1,4 +1,5 @@
 #pragma once
+#include "config.h"
 #include "list.h"
 #include "arch_regs.h"
 #include "vcpu.h"
@@ -29,6 +30,9 @@ typedef struct hyper_task {
     /* Linux MPIDR affinity bits as advertised in dts cpu@N/reg */
     uint64_t             mpidr;
 
+    /* Host pCPU affinity: -1 = any, 0..N = pinned to pCPU N */
+    int                  pcpu_affinity;
+
     /* Debug counters per vCPU */
     uint64_t             trap_count;
     uint64_t             irq_count;
@@ -43,6 +47,10 @@ int create_task2(const char *name, void *entry, int priority);
 int create_task3(const char *name, void *__entry, int priority);
 
 void sched_yield(struct cpu_user_regs *irq_reg);
-hyper_task_t *current_task();
+hyper_task_t *current_task(void);
+void set_current(void *c);
+
+/* Global running-task snapshot indexed by pCPU id. */
+extern hyper_task_t *g_running[CONFIG_SMP_CPU_NUM];
 
 void sched_yield2(struct cpu_user_regs *irq_reg);

@@ -16,6 +16,10 @@ enum log_output_mode {
 /* Write one character through the log subsystem (ring buffer + UART). */
 void log_putchar(char ch);
 
+/* Acquire/release the log spinlock (for SMP-safe whole-message output). */
+void log_lock(void);
+void log_unlock(void);
+
 /* Flush ring buffer contents to UART. Typically called from panic. */
 void log_flush(void);
 

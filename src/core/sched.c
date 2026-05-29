@@ -15,8 +15,13 @@
 #include "timer.h"
 #include "src/drivers/gic/gicv3.h"
 #include "hyper_config.h"
+#include "percpu.h"
 
-hyper_task_t               *g_current_task = NULL;
+DEFINE_PER_CPU(hyper_task_t *, current_task);
+
+/* Global running-task snapshot, updated by set_current(). */
+hyper_task_t *g_running[CONFIG_SMP_CPU_NUM];
+
 static size_t               g_task_id = 1;
 // static spinlock_t           g_task_lock;
 static struct cpu_user_regs g_empty_regs;
@@ -24,16 +29,21 @@ static struct cpu_user_regs g_empty_regs;
 #define INIT_PRIORITY (100u)
 
 
-hyper_task_t *current_task() { return g_current_task; }
+hyper_task_t *current_task(void) {
+    return *(hyper_task_t **)this_cpu(current_task);
+}
 
-void set_current(void *c) { g_current_task = c; }
+void set_current(void *c) {
+    *(hyper_task_t **)this_cpu(current_task) = (hyper_task_t *)c;
+    g_running[cpu_id()] = (hyper_task_t *)c;
+}
 
 void sink_task(void) {
     hyper_task_t *task = current_task();
     hyper_info("task(%p)-%d sink", task, task->id);
     task->state = TASK_EXIT;
     kfree(task);
-    g_current_task = NULL;
+    set_current(NULL);
 
     hyper_info("sink done");
     // wfi();
@@ -43,7 +53,6 @@ void sink_task(void) {
 
 int init_sched() {
     simple_scheduler_init();
-    g_current_task = NULL;
     // INIT_SPIN_LOCK(g_task_lock);
     // g_empty_regs.pc = 0;
     arch_set_pc(&g_empty_regs, 0);
@@ -99,6 +108,7 @@ int create_task(const char *name, void *entry, int priority) {
     task->priority = priority;
     task->id = g_task_id++;
     task->state = TASK_READY;
+    task->pcpu_affinity = 0;   /* vCPU0 pinned to pCPU0 */
     u64 boot_mpidr = hyper_config()->guest.vcpu_mpidr[0] & 0xff00ffffffULL;
     task->mpidr = boot_mpidr;
     task->vcpu = create_vcpu(1, 0);
@@ -254,6 +264,12 @@ void arch_regs_restore(struct cpu_user_regs *irq_regs, vcpu_t *vcpu) {
 void __el2_switch_to(hyper_task_t *cur, hyper_task_t *next, struct cpu_user_regs *irq_regs) {
 
     next->switch_count++;
+    if (next->switch_count <= 2)
+        hyper_info("switch on pCPU%d: task%d '%s' -> task%d '%s' (pc=0x%lx)",
+                   cpu_id(),
+                   cur ? cur->id : 0, cur ? cur->name : "(none)",
+                   next->id, next->name,
+                   next->vcpu->regs.pc);
 
     if (cur) {
         /* save cur frame to task info
@@ -295,15 +311,15 @@ void sched_yield(struct cpu_user_regs *irq_reg) {
     if (arch_get_pc(&g_empty_regs) == 0)
         g_empty_regs = *irq_reg;
     hyper_task_t *current = current_task();
-    // arch_spin_lock_irqsave(&g_task_lock, flags);
 
     hyper_task_t *task = simple_scheduler_next();
 
     if (!task) {
-        // hyper_warn("task not found, current:%p", current);
-        // arch_spin_unlock_irqrestore(&g_task_lock, flags);
-        // if (current)  __el2_switch_to(NULL, current, irq_reg);
-        // *irq_reg = current->vcpu->regs;
+        /* No other task to run — flush pending virtual interrupts for the
+         * current vCPU so that cross-pCPU SGIs are delivered without
+         * requiring a full context switch. */
+        if (current && current->pending_virq_count > 0)
+            gic_vcpu_flush_lr(current);
         return;
     }
 
