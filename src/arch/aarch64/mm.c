@@ -88,9 +88,9 @@ int init_direct_mapping() {
     size_t  map_size = (1ul << 30);
     paddr_t phy_end = phy_start + map_size;
 
-    hyper_debug("page direct-mapping %lx -> %lx\n", phy_start, phy_end);
+    hyper_debug("page direct-mapping %lx -> %lx", phy_start, phy_end);
     print_addr_idx(PAGE_VIRT_OFFSET);
-    hyper_debug("page-tables: %p,%p,%p\n",
+    hyper_debug("page-tables: %p,%p,%p",
               boot_pgtable,
               pages_direct_mapping_L1,
               pages_direct_mapping_L2);
@@ -118,7 +118,7 @@ void __fix_map(vaddr_t virt, paddr_t phys, int slot, int attr, lpae_t *table_L0,
     e.pt.table = 0;
     lpae_t *entry_start = &fix[slot];
     entry_start[pte_offset(virt, 2)] = e;
-    // hyper_info("------ %p %p = %p\n", stage2_fix_mapping_L2, &entry_start[72], e.bits);
+    // hyper_info("------ %p %p = %p", stage2_fix_mapping_L2, &entry_start[72], e.bits);
 }
 
 void fix_map(vaddr_t virt, paddr_t phys, int slot, int attr) {
@@ -137,7 +137,7 @@ int build_hyper_two_level_page_table(vaddr_t virt_start, paddr_t phys_start, siz
     lpae_t *table_L1 = boot_first;
     lpae_t *table_L2 = boot_second;
 
-    hyper_debug("virt idx: %lx %lx %lx %lx\n",
+    hyper_debug("virt idx: %lx %lx %lx %lx",
               pte_offset(virt_start, 0),
               pte_offset(virt_start, 1),
               pte_offset(virt_start, 2),
@@ -159,9 +159,9 @@ int build_hyper_three_level_page_table(vaddr_t virt_start, paddr_t phys_start, s
 }
 
 void dump_stage2_table(int level) {
-    hyper_info("summary: L0:%p, L1:%p, L2:%p, L3:%p\n", stage2_L0, stage2_L1, stage2_L2, stage2_L3);
-    hyper_info("%lx\n", stage2_L0[0].bits);
-    hyper_info("%p, %lx\n", boot_pgtable, boot_pgtable[0].bits);
+    hyper_info("summary: L0:%p, L1:%p, L2:%p, L3:%p", stage2_L0, stage2_L1, stage2_L2, stage2_L3);
+    hyper_info("%lx", stage2_L0[0].bits);
+    hyper_info("%p, %lx", boot_pgtable, boot_pgtable[0].bits);
 }
 
 /*
@@ -204,7 +204,7 @@ void create_uart_guest_map() {
     stage2_L3_b[idx].bits = 0x1c090000 | 0x7ff;
 #endif
     // p[idx] = make_stage2_entry(0x40200000, MEM_DEVICE);
-    hyper_info("uart index: %lx %lx %lx %lx\n",
+    hyper_info("uart index: %lx %lx %lx %lx",
              pte_offset(mem_start, 0),
              pte_offset(mem_start, 1),
              pte_offset(mem_start, 2),
@@ -226,9 +226,9 @@ void enable_stage2_traslation(lpae_t *table_root) {
     s2_setup_info(&s2_mm_info, pa_ps);
     s2_alloc_root_pages(&s2_mm_info);
     if(s2_mm_info.pa_size == 42)
-        hyper_fatal("pa_size %d unsupported\n", s2_mm_info.pa_size);
+        hyper_fatal("pa_size %d unsupported", s2_mm_info.pa_size);
 
-    hyper_debug("pa-size:%d, ps:%d\n", s2_mm_info.pa_size, pa_ps);
+    hyper_debug("pa-size:%d, ps:%d", s2_mm_info.pa_size, pa_ps);
 
     // stage2_map(&s2_mm_info,  MEM_VIRT_START, MEM_VIRT_START, (10 << 20), MEM_NORMAL_RW, MEM_ACCESS_RWX);
     // stage2_map(&s2_mm_info,  0x90000000, 0x90000000, (10 << 20), MEM_NORMAL_RW, MEM_ACCESS_RWX);
@@ -283,7 +283,7 @@ extern void timer_init();
 
 // #define MT_NORMAL 4
 void enable_mmu(void *table) {
-    // hyper_info("Enable paging\n");
+    // hyper_info("Enable paging");
 
     safe_printf("mair_el2:%lx\n", mrs(mair_el2));
 
@@ -306,7 +306,7 @@ void enable_mmu(void *table) {
     asm volatile("isb");
 
     uint64_t val = mrs(SCTLR_EL2);
-    // hyper_debug("mmu: %x\n", val);
+    // hyper_debug("mmu: %x", val);
 
     /* enable mmu and data cache */
     val |= (SCTLR_Axx_ELx_M | SCTLR_Axx_ELx_C);
@@ -317,22 +317,22 @@ void enable_mmu(void *table) {
     asm volatile("isb");
     asm volatile("dsb sy\n\t isb");
 
-    hyper_info("enable mmu done\n");
+    hyper_info("enable mmu done");
 }
 
 int ptw_test(lpae_t *tbl_root, vaddr_t vir) {
     paddr_t p = __walk_page_table(tbl_root, vir, 0) | ((vir) & 0xFFF);
-    hyper_info("PTW(%lx) -> (%lx)\n", vir, p);
+    hyper_info("PTW(%lx) -> (%lx)", vir, p);
 
     paddr_t e = vir_to_phy(vir);
 
     if (p != e) {
-        hyper_err("ptw failed for %lx (%lx != %lx)\n", vir, p, e);
+        hyper_err("ptw failed for %lx (%lx != %lx)", vir, p, e);
         return -1;
     }
 
     print_addr_idx(PAGE_VIRT_OFFSET);
-    hyper_info("PTW for %lx PASS\n", vir);
+    hyper_info("PTW for %lx PASS", vir);
     return 0;
 }
 #include "tlsf.h"
@@ -344,7 +344,7 @@ void test_page_alloc() {
     void *k_ptr;
     dump_kmalloc_status();
     k_ptr = kmalloc(0x1000);
-    hyper_info("test kmalloc -------- %p\n", k_ptr);
+    hyper_info("test kmalloc -------- %p", k_ptr);
 
     dump_kmalloc_status();
     kfree(k_ptr);
@@ -358,20 +358,20 @@ void test_page_alloc() {
     int pfn = alloc_pages(1);
             // print_page_layout(0, 512);
 
-    hyper_info("get page:<%d vir: %lx>, <%d vir:%lx>\n", pfn2, PAGE_VIR(pfn2), pfn, PAGE_VIR(pfn));
+    hyper_info("get page:<%d vir: %lx>, <%d vir:%lx>", pfn2, PAGE_VIR(pfn2), pfn, PAGE_VIR(pfn));
 
     free_pages(pfn2, 2);
             // print_page_layout(0, 512);
 
     int pfn3 = alloc_pages(1);
     if (pfn2 != pfn3)
-        hyper_fatal("page allocator Failed %d vs %d\n", pfn2, pfn3);
+        hyper_fatal("page allocator Failed %d vs %d", pfn2, pfn3);
 
 
-    hyper_info("page allocator test PASS\n");
+    hyper_info("page allocator test PASS");
 
     page_summary();
-    hyper_info("kmap page count: %lx, %lx - %lx / %d\n",
+    hyper_info("kmap page count: %lx, %lx - %lx / %d",
              KMAP_TBL_PAGE_NUM,
              KMAP_VIRT_END,
              KMAP_VIRT_START,
@@ -380,12 +380,12 @@ void test_page_alloc() {
     /* init kmap */
     int fn = alloc_pages_cnt(KMAP_L2_PAGE_NUM);
     if (fn < 0)
-        hyper_fatal("no enough pages:%lx for kmap\n", KMAP_TBL_PAGE_NUM);
+        hyper_fatal("no enough pages:%lx for kmap", KMAP_TBL_PAGE_NUM);
     g_kmap_l2_tbl = (lpae_t *)PAGE_VIR(fn);
 
     fn = alloc_pages_cnt(KMAP_L3_PAGE_NUM);
     if (fn < 0)
-        hyper_fatal("no engouth pages for kmap L3\n");
+        hyper_fatal("no engouth pages for kmap L3");
     g_kmap_l3_tbl = (lpae_t *)PAGE_VIR(fn);
 
 #define KMAP_INVALID_ADDR 0
@@ -431,7 +431,7 @@ void init_mm(void) {
 
 #endif
 
-    // hyper_info("image size: 0x%x from %p -> %p\n", map_size, &_hyper_start, &_hyper_end);
+    // hyper_info("image size: 0x%x from %p -> %p", map_size, &_hyper_start, &_hyper_end);
 
 
     uint64_t hcr_val = get_default_hcr_flags();
@@ -439,7 +439,7 @@ void init_mm(void) {
     hcr_val |= (1lu << 31);
     hcr_val |= (1lu << 42) | (1lu << 43) | (1lu << 45);
     // hcr_val |= HCR_TGE;
-    // hyper_info("hcr: %x\n", hcr_val);
+    // hyper_info("hcr: %x", hcr_val);
     msr(hcr_el2, hcr_val);
 
     safe_printf("enable mmu: %lx\n", hcr_val);
@@ -447,7 +447,7 @@ void init_mm(void) {
 
     // map_size = phy_memory_size;
 
-    // hyper_debug("dbug: from %lx %lx size:%lx\n", MEM_VIRT_START, MEM_VIRT_START, map_size);
+    // hyper_debug("dbug: from %lx %lx size:%lx", MEM_VIRT_START, MEM_VIRT_START, map_size);
 #ifdef CONFIG_HOST_USE_2MB_MAPPING
     build_hyper_two_level_page_table(MEM_VIRT_START, MEM_VIRT_START, (uint64_t)map_size, MT_NORMAL_WB);
 #else
@@ -463,7 +463,7 @@ void init_mm(void) {
     enable_mmu(boot_pgtable);
 
 
-    hyper_info("mmu enabled\n");
+    hyper_info("mmu enabled");
 
 
     // enable_mmu(pages_direct_mapping_L0);
@@ -486,7 +486,7 @@ void init_mm(void) {
     // u64 vp2 = __vmalloc(0x2000);
     // __vfree(vp, 0x4000);
     // u64 vp3 = __vmalloc(0x3000);
-    // hyper_debug("_vmalloc get %lx, %lx %lx\n",vp, vp2, vp3);
+    // hyper_debug("_vmalloc get %lx, %lx %lx",vp, vp2, vp3);
 
 #ifdef CONFIG_BOARD_QEMU_VIRT
     void *uart_addr = ioremap_page(0x09000000, MT_NORMAL);

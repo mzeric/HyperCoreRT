@@ -30,12 +30,12 @@ void set_current(void *c) { g_current_task = c; }
 
 void sink_task(void) {
     hyper_task_t *task = current_task();
-    hyper_info("task(%p)-%d sink\n", task, task->id);
+    hyper_info("task(%p)-%d sink", task, task->id);
     task->state = TASK_EXIT;
     kfree(task);
     g_current_task = NULL;
 
-    hyper_info("sink done\n");
+    hyper_info("sink done");
     // wfi();
     while (1)
         ;
@@ -94,7 +94,7 @@ int create_task(const char *name, void *entry, int priority) {
     memset(task, 0, sizeof(hyper_task_t));
     INIT_LIST_HEAD(&task->list);
 
-    hyper_debug("create vcpu:%p\n", task->vcpu);
+    hyper_debug("create vcpu:%p", task->vcpu);
 
     task->priority = priority;
     task->id = g_task_id++;
@@ -105,17 +105,17 @@ int create_task(const char *name, void *entry, int priority) {
     if (task->vcpu)
         task->vcpu->arch.vmpidr = 0x80000000ULL | boot_mpidr;
     if (task->vcpu == NULL) {
-        hyper_err("create vcpu failed\n");
+        hyper_err("create vcpu failed");
         return -1;
     }
     uintptr_t stack_ptr = (uintptr_t)kmalloc(4096) + 4096;
-    hyper_info("init task stack:%p\n", (void *)stack_ptr);
+    hyper_info("init task stack:%p", (void *)stack_ptr);
     arch_vcpu_init(task->vcpu, (uintptr_t)entry, stack_ptr);
     init_task_regs(task, entry, stack_ptr);
     if (name)
         memcpy(task->name, name, min(sizeof(task->name), strlen(name)));
 
-    hyper_info("init done\n");
+    hyper_info("init done");
     simple_scheduler_sched(task);
 
     return 0;
@@ -162,7 +162,7 @@ int create_task2(const char *name, void *entry, int priority) {
     memset(task, 0, sizeof(hyper_task_t));
     INIT_LIST_HEAD(&task->list);
 
-    hyper_debug("create vcpu:%p\n", task->vcpu);
+    hyper_debug("create vcpu:%p", task->vcpu);
 
     task->priority = priority;
     task->id = g_task_id++;
@@ -171,17 +171,17 @@ int create_task2(const char *name, void *entry, int priority) {
     task->mpidr = (uint64_t)-1;
     task->vcpu = create_vcpu(1, 0);
     if (task->vcpu == NULL) {
-        hyper_err("create vcpu failed\n");
+        hyper_err("create vcpu failed");
         return -1;
     }
     uintptr_t stack_ptr = (uintptr_t)kmalloc(4096) + 4096;
-    hyper_info("init task stack:%p\n", (void *)stack_ptr);
+    hyper_info("init task stack:%p", (void *)stack_ptr);
     arch_vcpu_init(task->vcpu, (uintptr_t)entry, stack_ptr);
     init_task_regs2(task, entry, stack_ptr);
     if (name)
         memcpy(task->name, name, min(sizeof(task->name), strlen(name)));
 
-    hyper_info("init done\n");
+    hyper_info("init done");
     simple_scheduler_sched(task);
 
     return 0;
@@ -210,24 +210,24 @@ int create_task3(const char *name, void *__entry, int priority) {
     memset(task, 0, sizeof(hyper_task_t));
     INIT_LIST_HEAD(&task->list);
 
-    hyper_debug("create vcpu:%p\n", task->vcpu);
+    hyper_debug("create vcpu:%p", task->vcpu);
 
     task->priority = priority;
     task->id = g_task_id++;
     task->state = TASK_READY;
     task->vcpu = create_vcpu(1, 0);
     if (task->vcpu == NULL) {
-        hyper_err("create vcpu failed\n");
+        hyper_err("create vcpu failed");
         return -1;
     }
     uintptr_t stack_ptr = (uintptr_t)kmalloc(4096) + 4096;
-    hyper_info("init task stack:%p\n", (void *)stack_ptr);
+    hyper_info("init task stack:%p", (void *)stack_ptr);
     arch_vcpu_init(task->vcpu, (uintptr_t)entry, stack_ptr);
     init_task_regs2(task, entry, stack_ptr);
     if (name)
         memcpy(task->name, name, min(sizeof(task->name), strlen(name)));
 
-    hyper_info("init done\n");
+    hyper_info("init done");
     simple_scheduler_sched(task);
 
     return 0;
@@ -236,7 +236,7 @@ int create_task3(const char *name, void *__entry, int priority) {
 void __dump_task(struct list_head *list) {
     hyper_task_t *task = NULL;
     list_for_each_entry(task, &g_ready_list, list) {
-        hyper_info("task:%s/%d p:%d\n", task->name, task->id, task->priority);
+        hyper_info("task:%s/%d p:%d", task->name, task->id, task->priority);
     }
 }
 
@@ -300,7 +300,7 @@ void sched_yield(struct cpu_user_regs *irq_reg) {
     hyper_task_t *task = simple_scheduler_next();
 
     if (!task) {
-        // hyper_warn("task not found, current:%p\n", current);
+        // hyper_warn("task not found, current:%p", current);
         // arch_spin_unlock_irqrestore(&g_task_lock, flags);
         // if (current)  __el2_switch_to(NULL, current, irq_reg);
         // *irq_reg = current->vcpu->regs;
@@ -323,7 +323,7 @@ void sched_yield2(struct cpu_user_regs *irq_reg) {
     hyper_task_t *task = simple_scheduler_next();
 
     if (!task) {
-        // hyper_warn("task not found, current:%p\n", current);
+        // hyper_warn("task not found, current:%p", current);
         // arch_spin_unlock_irqrestore(&g_task_lock, flags);
         // if (current)  __el2_switch_to(NULL, current, irq_reg);
         // *irq_reg = current->vcpu->regs;

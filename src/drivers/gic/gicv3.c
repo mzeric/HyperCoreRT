@@ -9,7 +9,7 @@
 #include "hyper_config.h"
 
 void init_gicv2(void *gicd_base, void *gicc_base) {
-    // hyper_info("gic probe: typer:%x\n", readl(gicd_base + 0x8));
+    // hyper_info("gic probe: typer:%x", readl(gicd_base + 0x8));
     u32 *gicd_ctl = (u32 *)gicd_base;
     u32 *gicc_ctl = (u32 *)gicc_base;
     *gicd_ctl |= 1;
@@ -139,11 +139,11 @@ void gicv3_reenable_hyp_timer_ppi(void) {
 }
 
 void init_gicv3(void *gicd_base, void *gicc_base, void *gicr_base) {
-    // hyper_info("gic probe(dist): id:%x, typer:%lx\n", readl(gicd_base + GICD_IIDR), readl(gicd_base
+    // hyper_info("gic probe(dist): id:%x, typer:%lx", readl(gicd_base + GICD_IIDR), readl(gicd_base
     // + GICD_TYPER));
 
     (void)readl(gicd_base + GICD_CTLR);
-    // hyper_info("ctlr: %x, pwrr: %x\n", val, readl(gicr_base + 0x24));
+    // hyper_info("ctlr: %x, pwrr: %x", val, readl(gicr_base + 0x24));
     if (current_el() == 2)
         enable_sre_el2();
 

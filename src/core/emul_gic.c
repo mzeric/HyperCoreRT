@@ -49,7 +49,7 @@ static u64 gic_emul_v3_read_lr(u32 lr)
 	case 13: return mrs_s(ENC_ICH_LR(13));
 	case 14: return mrs_s(ENC_ICH_LR(14));
 	case 15: return mrs_s(ENC_ICH_LR(15));
-	default: hyper_err("%s: LR%d invalid\n", __func__, lr); break;
+	default: hyper_err("%s: LR%d invalid", __func__, lr); break;
 	}
 	return 0;
 }
@@ -73,7 +73,7 @@ static void gic_emul_v3_write_lr(u32 lr, u64 val)
 	case 13: msr_s(ENC_ICH_LR(13), val); return;
 	case 14: msr_s(ENC_ICH_LR(14), val); return;
 	case 15: msr_s(ENC_ICH_LR(15), val); return;
-	default: hyper_err("%s: LR%d invalid\n", __func__, lr); return;
+	default: hyper_err("%s: LR%d invalid", __func__, lr); return;
 	}
 }
 
@@ -231,7 +231,7 @@ int gic_vcpu_send_sgi(const struct gic_vcpu_sgi *sgi) {
 			u32 aff0 = ((u32)sgi->rs * 16U) + bit;
 			hyper_task_t *target = find_task_by_mpidr(gic_emul_sgi_target_mpidr(sgi, aff0));
 			if (!target) {
-				hyper_warn("vgic: SGI%d target mpidr 0x%lx not found\n",
+				hyper_warn("vgic: SGI%d target mpidr 0x%lx not found",
 				         sgi->intid, gic_emul_sgi_target_mpidr(sgi, aff0));
 				continue;
 			}
@@ -241,7 +241,7 @@ int gic_vcpu_send_sgi(const struct gic_vcpu_sgi *sgi) {
 	}
 
 	if (!delivered)
-		hyper_warn("vgic: SGI%d delivered to nobody\n", sgi->intid);
+		hyper_warn("vgic: SGI%d delivered to nobody", sgi->intid);
 	return 0;
 }
 
@@ -262,7 +262,7 @@ void gic_vcpu_inject_virq(hyper_task_t *task, int virq) {
 	if (!task)
 		return;
 	if (task->pending_virq_count >= VCPU_MAX_PENDING_VIRQ) {
-		hyper_warn("vgic: pending virq full on task %d, dropping irq %d\n",
+		hyper_warn("vgic: pending virq full on task %d, dropping irq %d",
 		         task->id, virq);
 		return;
 	}

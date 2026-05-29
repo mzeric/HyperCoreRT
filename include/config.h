@@ -18,3 +18,19 @@
 
 /* Stack */
 #define CONFIG_INT_STACK_SIZE 409600
+
+/* Log levels */
+#define LOG_LEVEL_DEBUG  0
+#define LOG_LEVEL_INFO   1
+#define LOG_LEVEL_WARN   2
+#define LOG_LEVEL_ERR    3
+#define LOG_LEVEL_FATAL  4
+#define LOG_LEVEL_NONE   5
+
+/* Compile-time minimum log level (lower levels compiled out entirely) */
+#ifndef LOG_LEVEL
+#define LOG_LEVEL  LOG_LEVEL_INFO
+#endif
+
+/* Ring buffer size for log retention */
+#define LOG_BUF_SIZE  (1 << 16)  /* 64KB */

@@ -30,7 +30,7 @@ int vcpu_emulate_read(vcpu_t *vcpu, struct cpu_user_regs *regs, paddr_t ipa, int
     int      ret;
 
     if (!mem->dev->driver->ops->read)
-        hyper_fatal("emulator:%s read func NULL\n", mem->match_name);
+        hyper_fatal("emulator:%s read func NULL", mem->match_name);
 
     ret = mem->dev->driver->ops->read(mem->dev, ipa, size, &value);
 
@@ -50,7 +50,7 @@ int vcpu_emulate_write(vcpu_t *vcpu, struct cpu_user_regs *regs, paddr_t ipa, in
 
 
     if (!mem->dev->driver->ops->write)
-        hyper_fatal("emulator:%s write func NULL\n", mem->match_name);
+        hyper_fatal("emulator:%s write func NULL", mem->match_name);
 
     ret = mem->dev->driver->ops->write(mem->dev, ipa, size, value);
 

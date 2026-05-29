@@ -7,6 +7,6 @@ struct emulate_ops {
 int emul_dev_aux_read(void) {
     int ret = 0;
 
-    hyper_debug("this\n");
+    hyper_debug("this");
     return ret;
 }

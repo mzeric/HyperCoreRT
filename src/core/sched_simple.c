@@ -30,7 +30,7 @@ hyper_task_t *get_ready_task() {
 hyper_task_t *pick_ready_task() {
     hyper_task_t *task = get_ready_task();
     if (!task) {
-        hyper_info("no task available\n");
+        hyper_info("no task available");
         return NULL;
     }
 
@@ -48,7 +48,7 @@ hyper_task_t *simple_scheduler_next() {
 
     hyper_task_t *current = current_task();
     if (current && current->priority < next->priority) {
-        hyper_info("current task-%d is high then task-%d\n", current->id, next->id);
+        hyper_info("current task-%d is high then task-%d", current->id, next->id);
         return NULL;
     }
     next = pick_ready_task();

@@ -35,6 +35,7 @@
 
 #include "safe_printf.h"
 #include "config.h"
+#include "log.h"
 
 
 // define this globally (e.g. gcc -DPRINTF_INCLUDE_CONFIG_H ...) to include the
@@ -151,7 +152,7 @@ static inline void _out_char(char character, void* buffer, size_t idx, size_t ma
 {
   (void)buffer; (void)idx; (void)maxlen;
   if (character) {
-    arch_putchar(character);
+    log_putchar(character);
   }
 }
 

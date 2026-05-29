@@ -5,6 +5,11 @@
 void arch_putchar(char c) {
     *(volatile int*)0x09000000 = c;
 }
+
+/* Guest test has no ring buffer — forward directly to UART. */
+void log_putchar(char ch) {
+    arch_putchar(ch);
+}
 #undef wfi
 #define wfi()				\
 	({asm volatile(			\

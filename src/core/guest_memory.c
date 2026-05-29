@@ -24,7 +24,7 @@ int check_overlap( vcpu_t *vcpu, struct mem_region *mem) {
     // 遍历链表，检查重叠
     list_for_each_entry(pos, head, list) {
         if (is_overlapping(pos->gpa, pos->size, mem_gpa, mem_size)) {
-            hyper_fatal("Overlapping memory region detected(%lx, %lx) vs (%lx,%lx)\n",
+            hyper_fatal("Overlapping memory region detected(%lx, %lx) vs (%lx,%lx)",
                       pos->gpa,
                       pos->size,
                       mem_gpa,
@@ -64,7 +64,7 @@ struct mem_region *guest_mem_find_region(vcpu_t *vcpu, uint64_t gpa, int attr) {
         if (pos->gpa <= gpa && gpa < (pos->gpa + pos->size)) {
             // 找到了位置
             if (strcmp(pos->match_name, "pl011") != 0)
-                hyper_info("find %lx (%lx <-> %lx) @ %p\n", gpa, pos->gpa, pos->hpa, pos);
+                hyper_debug("find %lx (%lx <-> %lx) @ %p", gpa, pos->gpa, pos->hpa, pos);
             return pos;
 
         }

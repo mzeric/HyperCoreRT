@@ -121,14 +121,14 @@ static int __pg_map(ptw_t *root, int start_level, int end_level, vaddr_t vaddr, 
     table = root;
 
     for (level = start_level; level < end_level; ++level) {
-        // hyper_info("table:%p\n", table);
+        // hyper_info("table:%p", table);
         pg_next_level(&table, level, pte_offset(vaddr, level), 0, without_mmu);
     }
 
     // map last pte
     ptw_t *pte = table + pte_offset(vaddr, level);
 
-    // hyper_debug("pte:%p = %p + %x\n", pte, table, pte_offset(vaddr, level));
+    // hyper_debug("pte:%p = %p + %x", pte, table, pte_offset(vaddr, level));
     write_pte(pte, paddr, attr);
 
     return 0;
@@ -139,18 +139,18 @@ static int pg_unmap_4k(ptw_t *pre_tbl, int level, vaddr_t vir_addr) {
     paddr_t next_tbl_phy;
     ptw_t *next_tbl_vir;
 
-    // hyper_debug("walk <%p> l-%d\n", vir_addr, level);
+    // hyper_debug("walk <%p> l-%d", vir_addr, level);
     if (!pre_tbl || level < 0 || level > 3)
         return 0;
     /* pre_tbl always well here */
     ptw_t *cur_pte = &pre_tbl[pte_offset(vir_addr, level)];
 
     if (cur_pte->walk.valid == 0 || cur_pte->walk.base == 0) {
-        hyper_fatal("try unmap no-mapped vaddr %lx\n", vir_addr);
+        hyper_fatal("try unmap no-mapped vaddr %lx", vir_addr);
     }
 
     if (level == 3) {
-        // hyper_debug("unmap phy: %lx\n", cur_pte->pt.base << 12);
+        // hyper_debug("unmap phy: %lx", cur_pte->pt.base << 12);
         cur_pte->bits = 0;
         return 0;
     }
@@ -170,9 +170,9 @@ static int pg_unmap_4k(ptw_t *pre_tbl, int level, vaddr_t vir_addr) {
 
     if (all_invalid) {
 
-        // hyper_debug("debug: %d\n", next_tbl_vir->pt.avail);
+        // hyper_debug("debug: %d", next_tbl_vir->pt.avail);
 
-        // hyper_debug("unmap free page 0x%lx\n", PHY_TO_FN(next_tbl_phy));
+        // hyper_debug("unmap free page 0x%lx", PHY_TO_FN(next_tbl_phy));
         free_one_page(PHY_TO_FN(next_tbl_phy));
         cur_pte->bits = 0;
     }

@@ -68,8 +68,8 @@ void destroy_task(hyper_task_t *task) {
 
 void do_bad_mode(struct cpu_user_regs *regs, int is_compat) {
 
-    hyper_debug("sysr: 0x%lx %d\n", regs->cpsr, is_compat);
-    hyper_debug("el:%lx\n", mrs(CurrentEL));
+    hyper_debug("sysr: 0x%lx %d", regs->cpsr, is_compat);
+    hyper_debug("el:%lx", mrs(CurrentEL));
 
 
 }
@@ -157,7 +157,7 @@ void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
         gicv3_eof_int(hirq_no);
     } else {
         gicv3_eof_int(hirq_no);
-        hyper_warn("[vCPU%d] unsupport irq: %d\n", current_task()->id, hirq_no);
+        hyper_warn("[vCPU%d] unsupport irq: %d", current_task()->id, hirq_no);
 
         // DEBUG
         while(1);
@@ -306,7 +306,7 @@ void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
        itself causes timing issues between vCPUs. */
     if (esr.ec != HSR_EC_SYSREG &&
         !(esr.ec == HSR_EC_DATA_ABORT_LOWER_EL && is_uart_ipa(get_ipa())))
-        hyper_info("[vCPU%d] Exception details: EC:0x%x, ISS:0x%x\n",
+        hyper_info("[vCPU%d] Exception details: EC:0x%x, ISS:0x%x",
                    current_task() ? current_task()->id : -1, esr.ec, esr.iss);
 
     switch (esr.ec) {
@@ -332,7 +332,7 @@ void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
         break;
     default: {
         dump_vcpu_state("EXCEPTION");
-        hyper_info("[vCPU%d] unknown exception EC:0x%x\n", current_task()->id, esr.ec);
+        hyper_info("[vCPU%d] unknown exception EC:0x%x", current_task()->id, esr.ec);
         panic("");
     }
     }

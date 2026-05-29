@@ -22,7 +22,7 @@ int fdt_node_offset(const void *fdt, int startoffset,
 	     offset = fdt_next_node(fdt, offset, &depth)) {
 		val = fdt_getprop(fdt, offset, propname, &len);
 
-        hyper_info("fdt try:[%s]:[%p], len=%d(try %d)\n", propname, val, len, proplen);
+        hyper_info("fdt try:[%s]:[%p], len=%d(try %d)", propname, val, len, proplen);
 		if (val && (len == proplen)
 		    && (memcmp(val, propval, len) == 0))
 			return offset;
@@ -77,11 +77,11 @@ int fdt_get_reg_info(void *fdt, int node, uint64_t *addr, uint64_t *size) {
     const u32 *p = fdt_getprop(fdt, node, "reg", &len);
 
     if(!p) {
-        hyper_err("reg <> not found\n");
+        hyper_err("reg <> not found");
         return -1;
     }
     if (p && len < (na + ns) * sizeof(uint32_t)) {
-        hyper_err("reg <> not enough\n");
+        hyper_err("reg <> not enough");
         return -2;
     }
 
@@ -95,6 +95,6 @@ int fdt_get_reg_info(void *fdt, int node, uint64_t *addr, uint64_t *size) {
     else
         *size = fdt32_ld(p + na);
 
-    // hyper_info("reg cells(%d,%d) value: <%lx, %lx>\n", na, ns, *addr, *size);
+    // hyper_info("reg cells(%d,%d) value: <%lx, %lx>", na, ns, *addr, *size);
     return 0;
 }

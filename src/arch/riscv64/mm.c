@@ -164,7 +164,7 @@ void init_mm() {
     init_kmalloc();
     // init_kmap();
 
-    printf("hello\n");
+    safe_printf("hello\n");
 
     setup_stage2_pages();
 

@@ -236,14 +236,14 @@ void timer_init() {
     // hyp_timer_fire(frq);
 
     // phy_timer_fire(frq);
-    hyper_debug("timer frq: %lx(%ld)\n", frq, frq);
+    hyper_debug("timer frq: %lx(%ld)", frq, frq);
     // msr(cntp_ctl_el0, 1);
     // write_cntp_tval(frq);
 
     /* fire hyper physical timer */
     hyp_timer_rearm();
 
-    // hyper_info("timer: %x t:%x, c:%x\n", mrs(cntpct_el0), mrs(cntp_tval_el0), mrs(cntp_cval_el0));
-    // hyper_info("timer: %x t:%x, c:%x\n", mrs(cntpct_el0), mrs(cntp_tval_el0), mrs(cntp_cval_el0));
+    // hyper_info("timer: %x t:%x, c:%x", mrs(cntpct_el0), mrs(cntp_tval_el0), mrs(cntp_cval_el0));
+    // hyper_info("timer: %x t:%x, c:%x", mrs(cntpct_el0), mrs(cntp_tval_el0), mrs(cntp_cval_el0));
 
 }

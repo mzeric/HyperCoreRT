@@ -13,7 +13,7 @@ void *alloc_mem_pool(uint64_t size) {
     size = (size + PAGE_SIZE - 1) & (PAGE_SIZE - 1);
     int fpn = alloc_pages_cnt(size >> PAGE_SHIFT);
     if (fpn < 0) {
-        hyper_err("alloc page failed:0x%lx\n", size);
+        hyper_err("alloc page failed:0x%lx", size);
         return NULL;
     }
 
@@ -24,7 +24,7 @@ void free_mem_pool(void *ptr, uint64_t size) {
     int pfn = VIR_TO_FN(ptr);
     int n = size >> 12;
     if (pfn < 0 || n <= 0) {
-        hyper_err("invalid addr:%p or size: 0x%lx\n", ptr, size);
+        hyper_err("invalid addr:%p or size: 0x%lx", ptr, size);
         return;
     }
 
@@ -34,7 +34,7 @@ void free_mem_pool(void *ptr, uint64_t size) {
 void *kmalloc(uint64_t size) {
     void *ptr = tlsf_malloc(g_kmalloc_handler, size);
     if (ptr < g_kmalloc_heap) {
-        hyper_err("tlsf_malloc wired return :%p\n", ptr);
+        hyper_err("tlsf_malloc wired return :%p", ptr);
         // panic("kmalloc");
     }
 
@@ -50,17 +50,17 @@ int init_kmalloc() {
     uint64_t size = KMALLOC_HEAP_SIZE;
     g_kmalloc_heap = alloc_mem_pool(size);
     if (!g_kmalloc_heap) {
-        hyper_fatal("no enough mem for kmalloc's init: 0x%lx\n", size);
+        hyper_fatal("no enough mem for kmalloc's init: 0x%lx", size);
         return -1;
     }
 
     g_kmalloc_handler = tlsf_create_with_pool(g_kmalloc_heap, size);
     if (g_kmalloc_handler == NULL) {
-        hyper_fatal("kmalloc's allocator failed\n");
+        hyper_fatal("kmalloc's allocator failed");
         return -1;
     }
 
-    // hyper_info("-----------------:%p\n", g_kmalloc_heap);
+    // hyper_info("-----------------:%p", g_kmalloc_heap);
     return 0;
 }
 
@@ -85,7 +85,7 @@ void dump_kmalloc_status() {
     u64 arg[2] = {0, 0};
     tlsf_walk_pool(pool, default_walker, arg);
 
-    hyper_info("kmalloc pool status: used:%lx, free:%lx  %.2f%%\n",
+    hyper_info("kmalloc pool status: used:%lx, free:%lx  %.2f%%",
              arg[0],
              arg[1],
              (double)arg[0] / arg[1] * 100);

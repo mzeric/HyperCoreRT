@@ -62,21 +62,21 @@ void page_summary() {
     }
     double allocatedPercentage = (double)allocatedPages / TOTAL_PAGES * 100;
 
-    hyper_info("Allocated pages: %d/%d\n", allocatedPages, TOTAL_PAGES);
-    hyper_info("Allocated percentage: %.2f%%\n", allocatedPercentage);
+    hyper_info("Allocated pages: %d/%d", allocatedPages, TOTAL_PAGES);
+    hyper_info("Allocated percentage: %.2f%%", allocatedPercentage);
 }
 
 void print_page_layout(int start, int end) {
     // 打印位图布局
-    printf("Bitmap layout: <%d - %d>\n", start, end);
+    safe_printf("Bitmap layout: <%d - %d>\n", start, end);
 
     for (int i = start; i < end; i++) {
-        printf("%d", is_bit_set(g_page_allocator_bitmap, i) ? 1 : 0);
+        safe_printf("%d", is_bit_set(g_page_allocator_bitmap, i) ? 1 : 0);
         if ((i + 1) % 64 == 0) { // 每64位换一行，以便于阅读
-            printf("\n");
+            safe_printf("\n");
         } else if ((i + 1) % 8 == 0) { // 每8位添加一个空格，增加可读性
-            printf(" ");
+            safe_printf(" ");
         }
     }
-    printf("\n");
+    safe_printf("\n");
 }

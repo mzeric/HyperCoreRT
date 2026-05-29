@@ -45,7 +45,7 @@ int __build_hyp_two_level_page_table(vaddr_t virt_start, paddr_t phys_start, uin
     paddr_t next_phy_addr = phys_start & (~(ARM_PT_LEVEL_SIZE(2) - 1));
 
     if (next_phy_addr & (MB(2) - 1)) {
-        hyper_fatal("physical addr of level-2'next addr not aligned\n");
+        hyper_fatal("physical addr of level-2'next addr not aligned");
     }
 
     /* fill L2 */
@@ -62,7 +62,7 @@ int __build_hyp_two_level_page_table(vaddr_t virt_start, paddr_t phys_start, uin
 
 void print_addr_idx(vaddr_t addr) {
 
-    hyper_info("offset[%lx]= <%lx, %lx, %lx, %lx>\n",
+    hyper_info("offset[%lx]= <%lx, %lx, %lx, %lx>",
              addr,
              pte_offset(addr, 0),
              pte_offset(addr, 1),
@@ -77,8 +77,8 @@ int __build_hyp_three_level_page_table(vaddr_t virt_start, paddr_t phys_start, u
     lpae_t *entry = NULL;
     vaddr_t addr;
 
-    // hyper_debug("page_tables: %p, %p, %p, %p\n", table_L0, table_L1, table_L2, table_L3);
-    // hyper_debug("map from %p:%p size: %p\n", virt_start, phys_start, mem_size);
+    // hyper_debug("page_tables: %p, %p, %p, %p", table_L0, table_L1, table_L2, table_L3);
+    // hyper_debug("map from %p:%p size: %p", virt_start, phys_start, mem_size);
     build_hyper_table(table_L0, (vaddr_t)table_L1, virt_start, 0, attr);
     build_hyper_table(table_L1, (vaddr_t)table_L2, virt_start, 1, attr);
 
@@ -127,7 +127,7 @@ paddr_t __walk_page_table(lpae_t *cur_tbl, vaddr_t addr, int level) {
         return 0;
 
 
-    hyper_info("ptw cur:%p -> %lx\n", cur_tbl, next_tbl_phy);
+    hyper_info("ptw cur:%p -> %lx", cur_tbl, next_tbl_phy);
     if (level == 3 || next_pte.pt.table == 0)
         return next_tbl_phy;
 
@@ -142,7 +142,7 @@ int __ptw_map_4k_page(vaddr_t vir_addr, paddr_t phy_addr, lpae_t *cur_tbl, int l
     paddr_t next_tbl_phy;
     lpae_t *next_tbl_vir;
 
-    // hyper_debug("walk <%p %p> %p l-%d\n", vir_addr, phy_addr, cur_tbl, level);
+    // hyper_debug("walk <%p %p> %p l-%d", vir_addr, phy_addr, cur_tbl, level);
     if (!cur_tbl || level < 0 || level > 3)
         return 0;
 
@@ -151,16 +151,16 @@ int __ptw_map_4k_page(vaddr_t vir_addr, paddr_t phy_addr, lpae_t *cur_tbl, int l
 
     /* check */
     if (level == 3 && (next_pte->pt.valid || next_pte->pt.base)) {
-        hyper_fatal("try remap existed entry\n");
+        hyper_fatal("try remap existed entry");
     }
 
     if (next_pte->pt.valid == 0 || next_pte->pt.base == 0) {
         /* next_pte.pt invalide */
         if (level != 3) {
             int fn = alloc_one_page();
-            hyper_debug("alloc page 0x%x\n", fn);
+            hyper_debug("alloc page 0x%x", fn);
             if (fn < 0) {
-                hyper_fatal("out-of-memory for ptw map\n");
+                hyper_fatal("out-of-memory for ptw map");
             }
             void *p = (void *)PAGE_VIR(fn);
             if (p)
@@ -183,7 +183,7 @@ int __ptw_map_4k_page(vaddr_t vir_addr, paddr_t phy_addr, lpae_t *cur_tbl, int l
          */
     }
 
-    // hyper_debug("l-%d idx %d, %p -> %p\n", level, pte_offset(vir_addr, level), next_pte, next_pte->pt.base << 12);
+    // hyper_debug("l-%d idx %d, %p -> %p", level, pte_offset(vir_addr, level), next_pte, next_pte->pt.base << 12);
     if(level == 3){
         next_pte->pt.avail = 1;
         return 0;
@@ -200,18 +200,18 @@ int __ptw_unmap_4k_page(vaddr_t vir_addr, lpae_t *pre_tbl, int level) {
     paddr_t next_tbl_phy;
     lpae_t *next_tbl_vir;
 
-    // hyper_debug("walk <%p %p> %p l-%d\n", vir_addr, phy_addr, cur_tbl, level);
+    // hyper_debug("walk <%p %p> %p l-%d", vir_addr, phy_addr, cur_tbl, level);
     if (!pre_tbl || level < 0 || level > 3)
         return 0;
     /* pre_tbl always well here */
     lpae_t *cur_pte = &pre_tbl[pte_offset(vir_addr, level)];
 
     if (cur_pte->pt.valid == 0 || cur_pte->pt.base == 0) {
-        hyper_fatal("phy_addr ptw broken\n");
+        hyper_fatal("phy_addr ptw broken");
     }
 
     if (level == 3) {
-        // hyper_debug("unmap phy: %lx\n", cur_pte->pt.base << 12);
+        // hyper_debug("unmap phy: %lx", cur_pte->pt.base << 12);
         cur_pte->bits = 0;
         return 0;
     }
@@ -231,9 +231,9 @@ int __ptw_unmap_4k_page(vaddr_t vir_addr, lpae_t *pre_tbl, int level) {
 
     if (all_invalid) {
 
-        // hyper_debug("debug: %d\n", next_tbl_vir->pt.avail);
+        // hyper_debug("debug: %d", next_tbl_vir->pt.avail);
 
-        // hyper_debug("unmap free page 0x%lx\n", PHY_TO_FN(next_tbl_phy));
+        // hyper_debug("unmap free page 0x%lx", PHY_TO_FN(next_tbl_phy));
         free_one_page(PHY_TO_FN(next_tbl_phy));
         cur_pte->bits = 0;
     }

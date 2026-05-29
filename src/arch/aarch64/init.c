@@ -614,7 +614,7 @@ int cpu_init(void) {
     uint64_t id0 __attribute__((unused)) = mrs(ID_AA64MMFR0_EL1); /* refs: arm:D7-2336 */
     uint64_t id1 __attribute__((unused)) = mrs(ID_AA64MMFR1_EL1);
 
-    // hyper_info("ID_AA64MMFR1_EL1: 0x%p, 0x%p\n", id0, id1);
+    // hyper_info("ID_AA64MMFR1_EL1: 0x%p, 0x%p", id0, id1);
     /*
     bits[3:0] Physical Address range supported. Defined values are::
         0000 32 bits, 4GB.
@@ -630,20 +630,20 @@ int cpu_init(void) {
     // id = id > 5 ? 5 : id;
 
     int phys_bits = get_phys_bits();
-    // hyper_debug("support %d(%d) physical address\n",  get_phys_bits(), id2pa_range(id0 & 0xF),
+    // hyper_debug("support %d(%d) physical address",  get_phys_bits(), id2pa_range(id0 & 0xF),
     //         get_phys_id());
     uint64_t tcr_val = (TCR_RES1 | TCR_SH0_IS | TCR_ORGN0_WBWA |
                         TCR_IRGN0_WBWA | TCR_T0SZ(64 - phys_bits));
     tcr_val |= (2 << 16); // SL0 = 2 => lookup level is 0
 
     if (phys_bits < 40) {
-        // hyper_err("phys bits:%d unsupported\n", phys_bits);
+        // hyper_err("phys bits:%d unsupported", phys_bits);
         return -1;
     }
 
     /* such as: 0x8084_3510 */
     msr(tcr_el2, tcr_val);
-    // hyper_info("TCR_EL2:%x\n", tcr_val);
+    // hyper_info("TCR_EL2:%x", tcr_val);
 
     /* clear SCTLR.A */
     // msr_sync(SCTLR_EL2, SCTLR_EL2_SET);
@@ -918,13 +918,13 @@ int __init_hyper_low_level(void *args) {
     write_sysreg(&__hyp_vectors, vbar_el2);
 
 #if 0
-    hyper_info("tcr: %x\n", TCR_EL2_VALUE);
+    hyper_info("tcr: %x", TCR_EL2_VALUE);
     msr(tcr_el2, TCR_EL2_VALUE);
 #endif
-    hyper_debug("el: 0x%lx, current_el:0x%x, cpu:%lx\n", el, current_el(),
+    hyper_debug("el: 0x%lx, current_el:0x%x, cpu:%lx", el, current_el(),
             smp_id());
 
-    hyper_info("=%lx\n", mrs(VTTBR_EL2));
+    hyper_info("=%lx", mrs(VTTBR_EL2));
 
 
 
@@ -933,7 +933,7 @@ int __init_hyper_low_level(void *args) {
     void *gicr_base = (void*)ioremap(g_hyper_config.host_gic.gicr_base, g_hyper_config.host_gic.gicr_size, MT_DEVICE_nGnRnE);
 
 
-    hyper_info("GICv - %x\n", readl(gicd_base + 4));
+    hyper_info("GICv - %x", readl(gicd_base + 4));
 
 #if 0
     if (readl(gicd_base + 0x4) == 0x68)
@@ -968,7 +968,7 @@ int __init_hyper_low_level(void *args) {
     // create_task("guard", hyper_guard, 10);
 
 
-    hyper_info("HyperCoreRT boot finished\n");
+    hyper_info("HyperCoreRT boot finished");
 
     // test_vcpu();
 

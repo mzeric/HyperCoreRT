@@ -81,7 +81,7 @@ int _write(int file, char* ptr, int len) {
 
 void _exit(int status) {
 
-    printf("should not _exit\n");
+    safe_printf("should not _exit\n");
     while(1);
 
 }

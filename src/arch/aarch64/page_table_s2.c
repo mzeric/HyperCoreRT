@@ -44,13 +44,13 @@ int s2_setup_info(struct stage2_mm_info *info, int pa_regs) {
 int s2_alloc_root_pages(struct stage2_mm_info *info) {
     int order = info->root_page_order;
     if (order < 0 || order > 4) {
-        hyper_fatal("invalide root_order: %d\n", order);
+        hyper_fatal("invalide root_order: %d", order);
     }
     info->root_table = PAGE_VIR(alloc_pages(info->root_page_order));
 
     memset((void *)info->root_table, 0, (1 << info->root_page_order) * PAGE_SIZE);
 
-    hyper_info("pa_size:%d, root_table:%lx, order:%d\n",
+    hyper_info("pa_size:%d, root_table:%lx, order:%d",
              info->pa_size,
              info->root_table,
              info->root_page_order);
@@ -65,15 +65,15 @@ static int s2_next_level_map(lpae_t **vtable, unsigned int level, unsigned int o
     entry = *vtable + offset;
 
     if (level == 3 && pte_is_valid(entry)) {
-        hyper_fatal("try remap existed s2 entry\n");
+        hyper_fatal("try remap existed s2 entry");
     }
 
     if (!pte_is_valid(entry)) {
         if (level != 3) {
             int fn = alloc_one_page();
-            // hyper_debug("alloc s2 page 0x%lx v:%p\n", fn, PAGE_VIR(fn));
+            // hyper_debug("alloc s2 page 0x%lx v:%p", fn, PAGE_VIR(fn));
             if (fn < 0) {
-                hyper_fatal("out-of-memory for ptw map\n");
+                hyper_fatal("out-of-memory for ptw map");
             }
             void *p = (void *)PAGE_VIR(fn);
             if (p)
@@ -83,13 +83,13 @@ static int s2_next_level_map(lpae_t **vtable, unsigned int level, unsigned int o
             // alloc a page for pte
         } else {
             // *entry = make_stage2_entry(, attr);
-            hyper_fatal("should NOT be here\n");
+            hyper_fatal("should NOT be here");
         }
     }
 
     /* block desc */
     if (!entry->walk.table) {
-        hyper_info("walk block desc\n");
+        hyper_info("walk block desc");
         return 0;
     }
 
@@ -115,14 +115,14 @@ int stage2_map_4k(lpae_t *root, int start_level, vaddr_t vaddr, paddr_t paddr, i
     table = root;
 
     for (level = start_level; level < end_level; ++level) {
-        // hyper_info("table:%p\n", table);
+        // hyper_info("table:%p", table);
         s2_next_level_map(&table, level, pte_offset(vaddr, level));
     }
 
     // map last pte
     lpae_t *pte = table + pte_offset(vaddr, level);
 
-    // hyper_debug("pte:%p = %p + %x\n", pte, table, pte_offset(vaddr, level));
+    // hyper_debug("pte:%p = %p + %x", pte, table, pte_offset(vaddr, level));
     write_pte(pte, make_stage2_entry(paddr, attr, acc));
     if (end_level != 3)
         pte->walk.table = 0; //?
@@ -135,18 +135,18 @@ static int stage2_unmap_page(lpae_t *pre_tbl, int level, vaddr_t vir_addr) {
     paddr_t next_tbl_phy;
     lpae_t *next_tbl_vir;
 
-    // hyper_debug("walk <%p> l-%d\n", vir_addr, level);
+    // hyper_debug("walk <%p> l-%d", vir_addr, level);
     if (!pre_tbl || level < 0 || level > 3)
         return 0;
     /* pre_tbl always well here */
     lpae_t *cur_pte = &pre_tbl[pte_offset(vir_addr, level)];
 
     if (cur_pte->pt.valid == 0 || cur_pte->pt.base == 0) {
-        hyper_fatal("try unmap no-mapped vaddr %lx\n", vir_addr);
+        hyper_fatal("try unmap no-mapped vaddr %lx", vir_addr);
     }
 
     if (level == 3) {
-        // hyper_debug("unmap phy: %lx\n", cur_pte->pt.base << 12);
+        // hyper_debug("unmap phy: %lx", cur_pte->pt.base << 12);
         cur_pte->bits = 0;
         return 0;
     }
@@ -166,9 +166,9 @@ static int stage2_unmap_page(lpae_t *pre_tbl, int level, vaddr_t vir_addr) {
 
     if (all_invalid) {
 
-        // hyper_debug("debug: %d\n", next_tbl_vir->pt.avail);
+        // hyper_debug("debug: %d", next_tbl_vir->pt.avail);
 
-        // hyper_debug("unmap free page 0x%lx\n", PHY_TO_FN(next_tbl_phy));
+        // hyper_debug("unmap free page 0x%lx", PHY_TO_FN(next_tbl_phy));
         free_one_page(PHY_TO_FN(next_tbl_phy));
         cur_pte->bits = 0;
     }
@@ -216,7 +216,7 @@ int build_static_stage2_page_table(vaddr_t virt_start, paddr_t phys_start, uint6
     lpae_t *entry = NULL;
     vaddr_t addr;
 
-    hyper_debug("map size: %lx from %lx:%lx\n", map_size, virt_start, phys_start);
+    hyper_debug("map size: %lx from %lx:%lx", map_size, virt_start, phys_start);
     build_s2_table(table_L0, (vaddr_t)table_L1, virt_start, 0, attr);
     build_s2_table(table_L1, (vaddr_t)table_L2, virt_start, 1, attr);
 
@@ -241,7 +241,7 @@ int build_static_stage2_page_table(vaddr_t virt_start, paddr_t phys_start, uint6
     entry = &table_L3[pte_offset(virt_start, 3)];
 
     if (phy_start & 0xFFF) {
-        hyper_err("physical addr of level-3'page addr not aligned\n");
+        hyper_err("physical addr of level-3'page addr not aligned");
         return -1;
     }
 

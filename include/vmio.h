@@ -2,40 +2,34 @@
 #include "compiler.h"
 #include "htypes.h"
 #include "safe_printf.h"
-#include <stdio.h>
+#include "config.h"
+#include "log.h"
 
 void panic(char *msg);
 
-#define hyper_debug(fmt, arg...)                                                 \
-    do {                                                                       \
-        printf("[Debug][%s:%d]" fmt, __FUNCTION__, __LINE__, ##arg);           \
+/* Runtime log level — defined in log.c. */
+extern int g_log_level;
+
+/* Internal helper: compile-time + runtime dual-gate. */
+#define _hyper_log(level, tag, fmt, ...)                                 \
+    do {                                                                 \
+        if ((level) < LOG_LEVEL) break;          /* compile-time gate */ \
+        if ((level) < g_log_level) break;        /* runtime gate */      \
+        safe_printf("[" tag "][%s:%d]" fmt "\n",                        \
+                    __FUNCTION__, __LINE__, ##__VA_ARGS__);              \
     } while (0)
 
-#define hyper_info(fmt, arg...)                                                  \
-    do {                                                                       \
-        printf("[Info][%s:%d]" fmt, __FUNCTION__, __LINE__, ##arg);            \
+#define hyper_debug(fmt, ...) _hyper_log(LOG_LEVEL_DEBUG, "Debug", fmt, ##__VA_ARGS__)
+#define hyper_info(fmt, ...)  _hyper_log(LOG_LEVEL_INFO,  "Info",  fmt, ##__VA_ARGS__)
+#define hyper_warn(fmt, ...)  _hyper_log(LOG_LEVEL_WARN,  "Warn",  fmt, ##__VA_ARGS__)
+#define hyper_err(fmt, ...)   _hyper_log(LOG_LEVEL_ERR,   "Error", fmt, ##__VA_ARGS__)
+#define hyper_fatal(fmt, ...)                                           \
+    do {                                                                \
+        _hyper_log(LOG_LEVEL_FATAL, "Fatal", fmt, ##__VA_ARGS__);      \
+        panic(".....\n");                                               \
     } while (0)
 
-#define hyper_warn(fmt, arg...)                                                  \
-    do {                                                                       \
-        printf("[Warn][%s:%d]" fmt, __FUNCTION__, __LINE__, ##arg);            \
-    } while (0)
-
-#define hyper_err(fmt, arg...)                                                   \
-    do {                                                                       \
-        printf("[Error][%s:%d]" fmt, __FUNCTION__, __LINE__, ##arg);           \
-    } while (0)
-
-#define hyper_fatal(fmt, arg...)                                                                     \
-    do {                                                                                           \
-        printf("[Fatal][%s:%d]" fmt, __FUNCTION__, __LINE__, ##arg);                               \
-        panic(".....\n");                                                                          \
-    } while (0)
-
-#define hyper_printf(fmt, arg...)                                                                    \
-    do {                                                                                           \
-        printf(fmt, ##arg);                                                                        \
-    } while (0)
+#define hyper_printf(fmt, ...) safe_printf(fmt, ##__VA_ARGS__)
 
 
 #define WARN_ON(p)                                                                                 \

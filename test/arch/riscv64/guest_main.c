@@ -6,6 +6,10 @@ void arch_putchar(char c) {
     *(volatile int *)0x20000000 = c;
 }
 
+void log_putchar(char ch) {
+    arch_putchar(ch);
+}
+
 void setup_traps();
 
 void _reset(void) {

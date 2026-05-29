@@ -43,7 +43,7 @@ bitmap_t create_bitmap(uint64_t start, int ele_size, int bit_nr) {
     };
 
     b.data = (uint64_t *)kmalloc(bit_nr / BITS_PER_BYTE);
-    hyper_debug("kmalloc ptr:%p, %d, %d\n", b.data, bit_nr, bit_nr/BITS_PER_BYTE);
+    hyper_debug("kmalloc ptr:%p, %d, %d", b.data, bit_nr, bit_nr/BITS_PER_BYTE);
     memset(b.data, 0, 4567);
     safe_printf("here\n");
     return b;
@@ -93,9 +93,9 @@ void host_unmap_pages(vaddr_t vir, int size);
 void *ioremap_page(paddr_t phy, int attr) {
     u64 vaddr = __vmalloc(PAGE_SIZE);
     if (!vaddr)
-        hyper_fatal("vmalloc failed\n");
+        hyper_fatal("vmalloc failed");
 
-    hyper_debug("ioremap <%lx, %lx>\n", vaddr, phy);
+    hyper_debug("ioremap <%lx, %lx>", vaddr, phy);
     host_map_one_page(vaddr, phy, attr);
 
     return (void *)vaddr;
@@ -105,9 +105,9 @@ void *ioremap(paddr_t phy, int size, int attr) {
     int page_num = round_up(size, PAGE_SIZE) >> PAGE_SHIFT;
     u64 vaddr = __vmalloc(size);
     if (!vaddr)
-        hyper_fatal("vmalloc failed\n");
+        hyper_fatal("vmalloc failed");
 
-    hyper_debug("ioremap <%lx, %lx>\n", vaddr, phy);
+    hyper_debug("ioremap <%lx, %lx>", vaddr, phy);
     host_map_pages(vaddr, phy, page_num, attr);
 
     return (void *)vaddr;

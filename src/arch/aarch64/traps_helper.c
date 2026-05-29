@@ -23,50 +23,50 @@ void print_iss_detail(const union esr esr) {
 
     switch (fsc) {
     case 0 ... 3:
-        hyper_info("FSC: address size fault level:%d\n", fsc & FSC_LL_MASK);
+        hyper_info("FSC: address size fault level:%d", fsc & FSC_LL_MASK);
         break;
     case FSC_FLT_TRANS ... FSC_FLT_TRANS + 3:
-        hyper_info("FSC: translation fault level:%d\n", fsc & FSC_LL_MASK);
+        hyper_info("FSC: translation fault level:%d", fsc & FSC_LL_MASK);
         break;
     case FSC_FLT_ACCESS ... FSC_FLT_ACCESS + 3:
-        hyper_info("FSC: access flag fault level:%d\n", fsc & FSC_LL_MASK);
+        hyper_info("FSC: access flag fault level:%d", fsc & FSC_LL_MASK);
         break;
     case FSC_FLT_PERM ... FSC_FLT_PERM + 3:
-        hyper_info("FSC: permission fault level:%d\n", fsc & FSC_LL_MASK);
+        hyper_info("FSC: permission fault level:%d", fsc & FSC_LL_MASK);
         break;
     case FSC_SEA:
-        hyper_info("FSC: Synchronous external abort\n");
+        hyper_info("FSC: Synchronous external abort");
         break;
     case FSC_SPE:
         hyper_info("FSC: Synchronous parity or ECC error on memory access, "
-                 "not on translation table walk\n");
+                 "not on translation table walk");
         break;
     case FSC_APE:
-        hyper_info("FSC:FSC_APE\n");
+        hyper_info("FSC:FSC_APE");
         break;
     case FSC_SEATT ... FSC_SEATT + 3:
         hyper_info("FSC: Synchronous external abort, on translation table "
-                 "walk, level:%d\n",
+                 "walk, level:%d",
                 fsc & FSC_LL_MASK);
         break;
     case FSC_SPETT ... FSC_SPETT + 3:
         hyper_info("FSC: Synchronous parity or ECC error on memory access on "
-                 "translation table walk, level:%d\n",
+                 "translation table walk, level:%d",
                 fsc & FSC_LL_MASK);
         break;
 
     case FSC_AF:
-        hyper_info("FSC: Alignment fault\n");
+        hyper_info("FSC: Alignment fault");
         break;
     case FSC_TLB_FLT:
-        hyper_info("FSC: TLB conflict abort\n");
+        hyper_info("FSC: TLB conflict abort");
         break;
     case FSC_UNS_STOMIC:
     case FSC_LKD:
     case FSC_UNS_EXCL:
     case FSC_CPR:
     default:
-        hyper_info("unsupport fsc 0x%x\n", fsc);
+        hyper_info("unsupport fsc 0x%x", fsc);
         break;
     }
 
@@ -98,7 +98,7 @@ void switch_to_el1(void) {
 
     extern void *_guest_stack_end;
 
-    hyper_info("el1 sp:%p\n", &_guest_stack_end);
+    hyper_info("el1 sp:%p", &_guest_stack_end);
 
     msr(elr_el2, guest_entry);
     msr(sp_el1, &_guest_stack_end);
@@ -113,7 +113,7 @@ void switch_to_el1(void) {
     msr(vpidr_el2, tmp);
     tmp = mrs(mpidr_el1);
     msr(vmpidr_el2, tmp);
-    hyper_info("vpidr:%x\n", tmp);
+    hyper_info("vpidr:%x", tmp);
 
     // disable co-processor traps
     // msr(cptr_el2, (3 << 12 | 0x3ff));
@@ -135,7 +135,7 @@ void switch_to_el1(void) {
                     SCTLR_EL1_SA_DIS | SCTLR_EL1_DCACHE_DIS |
                     SCTLR_EL1_ALIGN_DIS | SCTLR_EL1_MMU_DIS);
     msr(sctlr_el1, sctlr_val);
-    hyper_info("sctlr_el1: %lx\n", sctlr_val);
+    hyper_info("sctlr_el1: %lx", sctlr_val);
 
     // uint64_t vector_el2 = mrs(vbar_el2);
     // msr(vbar_el1, vector_el2);
@@ -144,7 +144,7 @@ void switch_to_el1(void) {
     tmp = (SPSR_EL_DEBUG_MASK | SPSR_EL_SERR_MASK |\
 			SPSR_EL_IRQ_MASK | SPSR_EL_FIQ_MASK |\
 			SPSR_EL_M_AARCH64 | SPSR_EL_M_EL1H);
-    hyper_debug("SPSR_EL2:%lx\n", tmp);
+    hyper_debug("SPSR_EL2:%lx", tmp);
     msr(spsr_el2, 0x3c5);
     asm volatile("eret\t\n":::"memory");
     while (1)

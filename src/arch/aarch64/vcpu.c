@@ -177,7 +177,7 @@ vcpu_t *create_vcpu(int vcpu_d, int priority) {
     vcpu_t *vcpu = NULL;
 
     if(!(vcpu = kmalloc(sizeof(vcpu_t)))){
-        hyper_fatal("alloc vcpu struct failed\n");
+        hyper_fatal("alloc vcpu struct failed");
         return NULL;
     }
 
