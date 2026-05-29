@@ -24,6 +24,7 @@
 #include "emul_dev.h"
 #include "emul_gic.h"
 #include "hyper_config.h"
+#include "smp.h"
 
 #include <ioremap.h>
 
@@ -949,6 +950,9 @@ int __init_hyper_low_level(void *args) {
     iounmap_page((vaddr_t)gicd_base);
     iounmap_page((vaddr_t)gicc_base);
     iounmap((vaddr_t)gicr_base, g_hyper_config.host_gic.gicr_size);
+
+    /* Boot secondary physical CPUs via PSCI */
+    smp_boot_secondaries((void *)CONFIG_DTB_LOAD_PHYS_ADDR);
 
     init_sched();
     init_emul_dev();
