@@ -2,6 +2,7 @@
 #include "processor.h"
 #include "aarch64_system.h"
 #include "asm_macros.h"
+#include "config.h"
 
 #define MAX_HEADER_SPACE 32
 
@@ -28,6 +29,7 @@
 .global _hang_head
 .global _stack_top_
 .global on_guest_excep_return
+.global secondary_entry
 
 .section .text.vector
 
@@ -47,10 +49,63 @@ _guest_head:
         b .
 
 _head:
-	ldr x0, =_hvc_stack_end
-	mov sp, x0
+	/*
+	 * Primary CPU (cpu0) entry.  Only CPU0 reaches here via QEMU
+	 * -kernel load.  Secondary CPUs are started via PSCI CPU_ON
+	 * and enter at secondary_entry directly.
+	 */
+	ldr	x0, =_hvc_stack_end
+	mov	sp, x0
 
 	bl _reset
+	b .
+
+/*
+ * Secondary physical CPU entry point.
+ * Entered via PSCI CPU_ON from primary, already at EL2.
+ * x0 = context_id (unused), x1 = entry point args (unused).
+ *
+ * Must set up its own stack before calling any C code.
+ */
+secondary_entry:
+	/* Determine CPU ID from MPIDR */
+	mrs	x0, mpidr_el1
+	ldr	x1, =0xff00ffffff
+	and	x0, x0, x1
+
+	mov	x2, #0
+	cmp	x0, #0x0
+	b.eq	1f
+	add	x2, x2, #1
+	cmp	x0, #0x100
+	b.eq	1f
+	/* Unknown CPU — hang */
+	b	.
+
+1:
+	/* x2 = linear cpu_id (0-based).
+	 * Select per-CPU stack: top = _hvc_stack_start + per_cpu_size * (cpu_id + 1)
+	 * per_cpu_size = total_region / CONFIG_SMP_CPU_NUM
+	 */
+	ldr	x3, =_hvc_stack_start
+	add	x2, x2, #1
+	ldr	x4, =_hvc_stack_end
+	ldr	x5, =_hvc_stack_start
+	sub	x4, x4, x5
+	lsr	x4, x4, #2           /* total / 4 (CONFIG_SMP_CPU_NUM) */
+	mul	x2, x2, x4
+	add	x3, x3, x2
+	mov	sp, x3
+
+	/* Set up exception vectors */
+	ldr	x0, =__hyp_vectors
+	msr	vbar_el2, x0
+	isb
+
+	/* Jump to C secondary init */
+	bl	secondary_start
+
+	/* Park: should never return */
 	b .
 
         .macro  push, xreg1, xreg2
