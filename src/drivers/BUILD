@@ -22,11 +22,15 @@ cc_library(
     name = "gic",
     srcs = glob([
         "gic/*.c",
+        "gic/*.cc",
     ]),
     hdrs = glob(["gic/*.h"]),
     includes = ["//:include/"],
     copts = [
         "-Wall",
+        "-fno-exceptions",
+        "-fno-rtti",
+        "-fno-threadsafe-statics",
     ],
     deps = [
        "//:common_headers",

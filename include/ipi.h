@@ -6,6 +6,10 @@
 #define IPI_RESCHEDULE  0
 #define IPI_MAX         1
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Send an IPI to a specific target pCPU.
  * target_cpu: linear CPU ID (not MPIDR). */
 void ipi_send_cpu(int target_cpu, uint8_t ipi_vec);
@@ -21,3 +25,7 @@ void ipi_handle(uint8_t ipi_vec);
 
 /* Initialize IPI handling on the current pCPU. */
 void ipi_pcpu_init(void);
+
+#ifdef __cplusplus
+}
+#endif

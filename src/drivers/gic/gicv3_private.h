@@ -2,6 +2,10 @@
 #include "gicv3.h"
 #include "gicv3_atf.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef assert
 #define assert(x) ((void)0)
 #endif
@@ -458,3 +462,7 @@ static inline void gits_wait_for_quiescent_bit(uintptr_t gits_base)
 	while ((gits_read_ctlr(gits_base) & GITS_CTLR_QUIESCENT_BIT) == 0U) {
 	}
 }
+
+#ifdef __cplusplus
+}
+#endif

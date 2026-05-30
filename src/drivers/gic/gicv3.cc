@@ -1,3 +1,5 @@
+extern "C" {
+
 #include "io.h"
 #include "sys_reg.h"
 #include "arch_barrier.h"
@@ -221,3 +223,5 @@ void ipi_pcpu_init(void)
 {
     /* SGIs (0-15) are always enabled in GICv3, no extra setup needed. */
 }
+
+} /* extern "C" */

@@ -5,6 +5,10 @@
 
 #define HYPER_MAX_VCPUS CONFIG_SMP_CPU_NUM
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct hyper_mem_config {
     u64 base;
     u64 size;
@@ -63,3 +67,7 @@ struct hyper_config {
 extern struct hyper_config g_hyper_config;
 
 struct hyper_config *hyper_config(void);
+
+#ifdef __cplusplus
+}
+#endif

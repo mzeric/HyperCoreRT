@@ -13,6 +13,10 @@ static inline int cpu_id(void)
     return (int)thread_id();
 }
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* CPU online states */
 enum cpu_state {
     CPU_OFFLINE = 0,
@@ -34,3 +38,7 @@ uint64_t smp_cpu_to_mpidr(int cpu);
 int  smp_cpu_count(void);
 void secondary_start(void);
 void smp_boot_secondaries(void *fdt);
+
+#ifdef __cplusplus
+}
+#endif
