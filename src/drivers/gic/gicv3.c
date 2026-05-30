@@ -8,6 +8,7 @@
 #include "emul_gic.h"
 #include "hyper_config.h"
 #include "smp.h"
+#include "ipi.h"
 
 void init_gicv2(void *gicd_base, void *gicc_base) {
     // hyper_info("gic probe: typer:%x", readl(gicd_base + 0x8));
@@ -164,8 +165,53 @@ void gicv3_pcpu_init(int cpu_id)
     gicv3_cpu_init(NULL);
 }
 
-/*
-https://github.com/seL4/seL4/blob/master/src/arch/arm/machine/gic_v3.c
-https://gitlab.arm.com/arm-reference-solutions/arm-reference-solutions-docs/-/blob/master/docs/aemfvp-a/user-guide.rst
-https://learn.arm.com/learning-paths/embedded-systems/docker/dockerfile/
-*/
+/* ---- Host physical IPI via SGI ---- */
+
+static void ipi_send_sgi(uint64_t target_mpidr, uint8_t sgi_id)
+{
+    uint64_t aff1 = (target_mpidr >> 8) & 0xff;
+    uint64_t aff2 = (target_mpidr >> 16) & 0xff;
+    uint64_t aff3 = (target_mpidr >> 32) & 0xff;
+
+    uint64_t sgir = GICV3_SGIR_VALUE(aff3, aff2, aff1, sgi_id,
+                                     SGIR_IRM_TO_AFF, 1ULL);
+    asm volatile("msr S3_0_C12_C11_5, %0" :: "r"(sgir) : "memory");
+    isb();
+}
+
+static void ipi_broadcast_sgi(uint8_t sgi_id)
+{
+    /* IRM=1 -> all other PEs */
+    uint64_t sgir = GICV3_SGIR_VALUE(0, 0, 0, sgi_id, 1, 0);
+    asm volatile("msr S3_0_C12_C11_5, %0" :: "r"(sgir) : "memory");
+    isb();
+}
+
+void ipi_send_cpu(int target_cpu, uint8_t ipi_vec)
+{
+    uint64_t mpidr = smp_cpu_to_mpidr(target_cpu);
+    if (mpidr == (uint64_t)-1)
+        return;
+    ipi_send_sgi(mpidr, ipi_vec);
+}
+
+void ipi_broadcast_others(uint8_t ipi_vec)
+{
+    ipi_broadcast_sgi(ipi_vec);
+}
+
+void ipi_handle(uint8_t ipi_vec)
+{
+    switch (ipi_vec) {
+    case IPI_RESCHEDULE:
+        /* Handled by the caller - the IRQ handler will call sched_yield */
+        break;
+    default:
+        break;
+    }
+}
+
+void ipi_pcpu_init(void)
+{
+    /* SGIs (0-15) are always enabled in GICv3, no extra setup needed. */
+}

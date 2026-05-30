@@ -26,6 +26,7 @@
 #include "hyper_config.h"
 #include "smp.h"
 #include "percpu.h"
+#include "ipi.h"
 
 #include <ioremap.h>
 
@@ -932,6 +933,7 @@ static void init_interrupt(void)
     hyper_info("GICv - %x", readl(gicd_base + 4));
     init_gicv3(gicd_base, gicc_base, gicr_base);
     gic_vcpu_init_pcpu();
+    ipi_pcpu_init();
 
     /* Save virtual GICR base for secondary CPU gicv3_pcpu_init() */
     g_hyper_config.host_gic.gicr_virt = (uintptr_t)gicr_base;

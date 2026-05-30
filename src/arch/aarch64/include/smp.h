@@ -30,5 +30,7 @@ struct host_cpu_desc {
 /* API */
 int  smp_mpidr_to_cpu(uint64_t mpidr);
 int  smp_current_cpu_id(void);
+uint64_t smp_cpu_to_mpidr(int cpu);
+int  smp_cpu_count(void);
 void secondary_start(void);
 void smp_boot_secondaries(void *fdt);

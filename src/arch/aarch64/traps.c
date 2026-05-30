@@ -20,6 +20,7 @@
 #include "emul_uart.h"
 #include "sys_reg.h"
 #include "smp.h"
+#include "ipi.h"
 
 #include <stdio.h> /* just remove guest warning */
 #include <string.h>
@@ -134,6 +135,14 @@ void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
     hirq_no = mrs(ICC_IAR1_EL1);
     if (current_task())
         current_task()->irq_count++;
+
+    /* SGI (0-15): host IPI */
+    if (hirq_no < 16) {
+        ipi_handle((uint8_t)hirq_no);
+        gicv3_eof_int(hirq_no);
+        sched_yield(regs);
+        return;
+    }
 
     if(hirq_no == hyper_config()->timer.hyp_timer_ppi) {
         gicv3_reenable_hyp_timer_ppi();

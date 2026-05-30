@@ -9,6 +9,7 @@
 #include "timer.h"
 #include "excep.h"
 #include "src/drivers/gic/gicv3.h"
+#include "ipi.h"
 
 #include <libfdt.h>
 #include <stdint.h>
@@ -60,6 +61,18 @@ int smp_mpidr_to_cpu(uint64_t mpidr)
 int smp_current_cpu_id(void)
 {
     return smp_mpidr_to_cpu(smp_id());
+}
+
+uint64_t smp_cpu_to_mpidr(int cpu)
+{
+    if (cpu < 0 || cpu >= host_cpu_count)
+        return (uint64_t)-1;
+    return host_cpus[cpu].mpidr;
+}
+
+int smp_cpu_count(void)
+{
+    return host_cpu_count;
 }
 
 /* ---- DTB /cpus parser ---- */
@@ -144,6 +157,7 @@ void secondary_start(void)
     /* Phase 2: per-pCPU GIC init using virtual addresses (after MMU) */
     gicv3_pcpu_init(cpu);
     gic_vcpu_init_pcpu();
+    ipi_pcpu_init();
 
     /* Phase 3: configure HCR_EL2 for stage-2 + trap routing */
     {
