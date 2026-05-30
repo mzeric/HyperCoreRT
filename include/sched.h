@@ -2,6 +2,7 @@
 #include "config.h"
 #include "list.h"
 #include "arch_regs.h"
+#include "spin_lock.h"
 #include "vcpu.h"
 
 
@@ -26,6 +27,7 @@ typedef struct hyper_task {
        Flushed into ICH_LRn_EL2 by __el2_switch_to on context restore. */
     int                  pending_virq[VCPU_MAX_PENDING_VIRQ];
     int                  pending_virq_count;
+    spinlock_t           virq_lock;
 
     /* Linux MPIDR affinity bits as advertised in dts cpu@N/reg */
     uint64_t             mpidr;

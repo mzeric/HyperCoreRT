@@ -3,6 +3,7 @@
 #include "sched.h"
 #include "emul_dev.h"
 #include "emul_gic.h"
+#include "spin_lock.h"
 #include "src/drivers/pl011/pl011.h"
 
 #include <string.h>
@@ -44,6 +45,7 @@ struct uart_emul_state {
 };
 
 static struct uart_emul_state g_uart_emul;
+static spinlock_t g_uart_lock = { .lock = SPIN_UNLOCKED };
 
 static u32 uart_emul_offset(u64 addr)
 {
@@ -93,20 +95,26 @@ static void uart_emul_update_irq(void)
     struct hyper_config *cfg = hyper_config();
     hyper_task_t *target;
 
+    arch_spin_lock(&g_uart_lock);
     uart_emul_refresh_rx_irq();
     if (!(g_uart_emul.ris & g_uart_emul.imsc & (UART_INT_RX | UART_INT_RT))) {
         g_uart_emul.irq_latched = 0;
+        arch_spin_unlock(&g_uart_lock);
         return;
     }
 
-    if (g_uart_emul.irq_latched)
+    if (g_uart_emul.irq_latched) {
+        arch_spin_unlock(&g_uart_lock);
         return;
+    }
+
+    g_uart_emul.irq_latched = 1;
+    arch_spin_unlock(&g_uart_lock);
 
     target = uart_emul_target_task();
     if (!target)
         return;
 
-    g_uart_emul.irq_latched = 1;
     gic_vcpu_inject_virq(target, cfg->uart.guest_irq);
     if (target == current_task())
         gic_vcpu_flush_lr(target);
@@ -114,12 +122,14 @@ static void uart_emul_update_irq(void)
 
 static u32 uart_emul_read_fr(void)
 {
+    arch_spin_lock(&g_uart_lock);
     u32 fr = PL011_UARTFR_TXFE | PL011_UARTFR_CTS;
 
     if (uart_emul_rx_empty())
         fr |= PL011_UARTFR_RXFE;
     if (uart_emul_rx_full())
         fr |= PL011_UARTFR_RXFF;
+    arch_spin_unlock(&g_uart_lock);
     return fr;
 }
 
@@ -153,12 +163,18 @@ int uart_vcpu_inject_rx(u8 ch)
 {
     if (!hyper_config()->uart.enabled)
         return -1;
-    if (uart_emul_rx_full())
+
+    arch_spin_lock(&g_uart_lock);
+    if (uart_emul_rx_full()) {
+        arch_spin_unlock(&g_uart_lock);
         return -1;
+    }
 
     g_uart_emul.rx_fifo[g_uart_emul.rx_head] = ch;
     g_uart_emul.rx_head = (g_uart_emul.rx_head + 1) % UART_EMUL_FIFO_SIZE;
     g_uart_emul.rx_count++;
+    arch_spin_unlock(&g_uart_lock);
+
     uart_emul_update_irq();
     return 0;
 }
@@ -185,10 +201,12 @@ static int uart_emul_read(struct emul_device *dev, uint64_t addr, int len, uint6
 
     switch (off) {
     case UARTDR:
+        arch_spin_lock(&g_uart_lock);
         if (uart_emul_rx_pop(&ch) == 0)
             *value = ch;
         else
             *value = 0;
+        arch_spin_unlock(&g_uart_lock);
         uart_emul_update_irq();
         return 0;
     case UARTRSR:
@@ -216,12 +234,16 @@ static int uart_emul_read(struct emul_device *dev, uint64_t addr, int len, uint6
         *value = g_uart_emul.imsc;
         return 0;
     case UARTRIS:
+        arch_spin_lock(&g_uart_lock);
         uart_emul_refresh_rx_irq();
         *value = g_uart_emul.ris;
+        arch_spin_unlock(&g_uart_lock);
         return 0;
     case UARTMIS:
+        arch_spin_lock(&g_uart_lock);
         uart_emul_refresh_rx_irq();
         *value = g_uart_emul.ris & g_uart_emul.imsc;
+        arch_spin_unlock(&g_uart_lock);
         return 0;
     case UARTDMACR:
         *value = g_uart_emul.dmacr;
@@ -257,18 +279,24 @@ static int uart_emul_write(struct emul_device *dev, uint64_t addr, int len, uint
         g_uart_emul.lcr_h = val;
         return 0;
     case UARTCR:
+        arch_spin_lock(&g_uart_lock);
         g_uart_emul.cr = val;
+        arch_spin_unlock(&g_uart_lock);
         uart_emul_update_irq();
         return 0;
     case UARTIFLS:
         g_uart_emul.ifls = val;
         return 0;
     case UARTIMSC:
+        arch_spin_lock(&g_uart_lock);
         g_uart_emul.imsc = val & UART_INT_ALL;
+        arch_spin_unlock(&g_uart_lock);
         uart_emul_update_irq();
         return 0;
     case UARTICR:
+        arch_spin_lock(&g_uart_lock);
         g_uart_emul.ris &= ~(val & UART_INT_ALL);
+        arch_spin_unlock(&g_uart_lock);
         uart_emul_update_irq();
         return 0;
     case UARTDMACR:

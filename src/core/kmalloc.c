@@ -3,9 +3,11 @@
 // #include "mm.h"
 #include "page.h"
 #include "arch_page.h"
+#include "spin_lock.h"
 
 static void *g_kmalloc_handler;
 static void *g_kmalloc_heap;
+static spinlock_t g_kmalloc_lock = { .lock = SPIN_UNLOCKED };
 
 #define KMALLOC_HEAP_SIZE (0x1000000) /* 16MB */
 
@@ -32,7 +34,9 @@ void free_mem_pool(void *ptr, uint64_t size) {
 }
 
 void *kmalloc(uint64_t size) {
+    arch_spin_lock(&g_kmalloc_lock);
     void *ptr = tlsf_malloc(g_kmalloc_handler, size);
+    arch_spin_unlock(&g_kmalloc_lock);
     if (ptr < g_kmalloc_heap) {
         hyper_err("tlsf_malloc wired return :%p", ptr);
         // panic("kmalloc");
@@ -42,8 +46,11 @@ void *kmalloc(uint64_t size) {
 }
 
 void kfree(void *ptr) {
-    if (ptr)
-        tlsf_free(g_kmalloc_handler, ptr);
+    if (!ptr)
+        return;
+    arch_spin_lock(&g_kmalloc_lock);
+    tlsf_free(g_kmalloc_handler, ptr);
+    arch_spin_unlock(&g_kmalloc_lock);
 }
 
 int init_kmalloc() {

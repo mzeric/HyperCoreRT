@@ -215,6 +215,11 @@ void create_uart_guest_map() {
 
 struct stage2_mm_info s2_mm_info;
 
+/* Global lock for shared stage-2 page table operations.
+ * All vCPUs share the same root_table, so we need one global lock. */
+static spinlock_t g_s2_lock = { .lock = SPIN_UNLOCKED };
+spinlock_t *get_s2_lock(void) { return &g_s2_lock; }
+
 /* Saved for secondary CPU MMU bring-up (set by primary during init). */
 struct mmu_boot_state g_mmu_boot;
 

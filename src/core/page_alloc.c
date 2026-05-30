@@ -4,6 +4,7 @@
 #include "safe_printf.h"
 #include "vmio.h"
 #include "arch_page.h"
+#include "spin_lock.h"
 
 #define TOTAL_PAGES (1024 * 1024) // 总共有1M个页 = 4G
 
@@ -12,19 +13,28 @@
 
 
 static uint64_t g_page_allocator_bitmap[BITMAP_SIZE]; /* 1 GB need 32KB */
+static spinlock_t g_page_lock = { .lock = SPIN_UNLOCKED };
 
 int alloc_pages_cnt(int cnt) {
+    arch_spin_lock(&g_page_lock);
     int start = bitmap_find_next_zero_area(g_page_allocator_bitmap, TOTAL_PAGES, 0, cnt, 1);
 
-    if (start >= TOTAL_PAGES)
+    if (start >= TOTAL_PAGES) {
+        arch_spin_unlock(&g_page_lock);
         return TOTAL_PAGES;
+    }
 
     set_bits(g_page_allocator_bitmap, start, cnt);
+    arch_spin_unlock(&g_page_lock);
 
     return start;
 }
 
-void free_pages_cnt(int pfn, int cnt) { clear_bits(g_page_allocator_bitmap, pfn, cnt); }
+void free_pages_cnt(int pfn, int cnt) {
+    arch_spin_lock(&g_page_lock);
+    clear_bits(g_page_allocator_bitmap, pfn, cnt);
+    arch_spin_unlock(&g_page_lock);
+}
 
 int alloc_pages(int order) { return alloc_pages_cnt(1ul << order); }
 

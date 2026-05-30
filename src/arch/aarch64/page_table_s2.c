@@ -4,6 +4,8 @@
 #include "mm.h"
 #include "inline_asm.h"
 #include "excep.h"
+#include "spin_lock.h"
+#include "mmu.h"
 #include <errno.h>
 #include <string.h>
 
@@ -185,11 +187,14 @@ int stage2_map(struct stage2_mm_info *info, vaddr_t vaddr, paddr_t paddr, uint64
 
     map_size = (map_size + PAGE_SIZE - 1) & PAGE_MASK;
 
+    spinlock_t *s2l = get_s2_lock();
+    arch_spin_lock(s2l);
     for (u64 i = 0; i < map_size; i += PAGE_SIZE) {
         stage2_map_4k(root, start_level, vaddr, paddr, attr, acc);
         vaddr += PAGE_SIZE;
         paddr += PAGE_SIZE;
     }
+    arch_spin_unlock(s2l);
 
     return 0;
 }
@@ -201,10 +206,13 @@ int stage2_unmap(struct stage2_mm_info *info, vaddr_t vaddr, uint64_t map_size )
 
     map_size = (map_size + PAGE_SIZE - 1) & PAGE_MASK;
 
+    spinlock_t *s2l = get_s2_lock();
+    arch_spin_lock(s2l);
     for (u64 i = 0; i < map_size; i += PAGE_SIZE) {
         stage2_unmap_page(root, start_level, vaddr);
         vaddr += PAGE_SIZE;
     }
+    arch_spin_unlock(s2l);
 
     return 0;
 }

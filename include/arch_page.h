@@ -1,6 +1,7 @@
 #pragma once
 #include "compiler.h"
 #include "htypes.h"
+#include "spin_lock.h"
 
 #ifndef MB
 #define MB(x) ((x) << 20)

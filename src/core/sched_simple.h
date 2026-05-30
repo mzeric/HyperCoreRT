@@ -1,5 +1,6 @@
 #pragma once
 
+#include "spin_lock.h"
 
 int  simple_scheduler_init();
 void simple_scheduler_insert(hyper_task_t *task, struct list_head *head);
@@ -10,3 +11,4 @@ void simple_scheduler_unblock(hyper_task_t *task);
 hyper_task_t *simple_scheduler_next();
 
 extern struct list_head g_ready_list;
+extern spinlock_t g_sched_lock;

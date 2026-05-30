@@ -8,7 +8,7 @@
 
 struct list_head     g_ready_list;
 struct list_head     g_wait_list;
-static spinlock_t    g_sched_lock = { .lock = SPIN_UNLOCKED };
+spinlock_t    g_sched_lock = { .lock = SPIN_UNLOCKED };
 
 bool is_task_in_chain(hyper_task_t *task) {
     struct list_head *entry = &task->list;
