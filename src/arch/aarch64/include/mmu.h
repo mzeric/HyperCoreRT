@@ -165,6 +165,9 @@ int get_pa_bits();
 int s2_setup_info(struct stage2_mm_info *info, int pa_regs);
 int s2_alloc_root_pages(struct stage2_mm_info *info);
 
+#include "spin_lock.h"
+spinlock_t *get_s2_lock(void);
+
 
 void build_hyper_table(lpae_t *table_current_level, vaddr_t next_tbl, vaddr_t virt, uint8_t level, int attr);
 

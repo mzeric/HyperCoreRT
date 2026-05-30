@@ -102,6 +102,7 @@ int create_task(const char *name, void *entry, int priority) {
 
     memset(task, 0, sizeof(hyper_task_t));
     INIT_LIST_HEAD(&task->list);
+    task->virq_lock = (spinlock_t){ .lock = SPIN_UNLOCKED };
 
     hyper_debug("create vcpu:%p", task->vcpu);
 
@@ -171,6 +172,7 @@ int create_task2(const char *name, void *entry, int priority) {
 
     memset(task, 0, sizeof(hyper_task_t));
     INIT_LIST_HEAD(&task->list);
+    task->virq_lock = (spinlock_t){ .lock = SPIN_UNLOCKED };
 
     hyper_debug("create vcpu:%p", task->vcpu);
 
@@ -219,6 +221,7 @@ int create_task3(const char *name, void *__entry, int priority) {
 
     memset(task, 0, sizeof(hyper_task_t));
     INIT_LIST_HEAD(&task->list);
+    task->virq_lock = (spinlock_t){ .lock = SPIN_UNLOCKED };
 
     hyper_debug("create vcpu:%p", task->vcpu);
 

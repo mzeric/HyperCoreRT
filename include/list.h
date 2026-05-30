@@ -19,10 +19,8 @@
  * the exact values are arbitrary, just pick something that will
  * never be a valid pointer in this hypervisor.
  */
-#ifndef LIST_POISON1
-#define LIST_POISON1  ((void *) 0xDEAD0101)
-#define LIST_POISON2  ((void *) 0xDEAD0202)
-#endif
+#define POISON_ADDR1  ((uintptr_t)0xDEAD0101)
+#define POISON_ADDR2  ((uintptr_t)0xDEAD0202)
 
 /*
  * Simple doubly linked list implementation.
@@ -185,8 +183,8 @@ static inline void list_del(struct list_head *entry)
     ASSERT(entry->next->prev == entry);
     ASSERT(entry->prev->next == entry);
     __list_del(entry->prev, entry->next);
-    entry->next = LIST_POISON1;
-    entry->prev = LIST_POISON2;
+    entry->next = (struct list_head *)POISON_ADDR1;
+    entry->prev = (struct list_head *)POISON_ADDR2;
 }
 
 /**
@@ -216,7 +214,7 @@ static inline void list_del(struct list_head *entry)
 static inline void list_del_rcu(struct list_head *entry)
 {
     __list_del(entry->prev, entry->next);
-    entry->prev = LIST_POISON2;
+    entry->prev = (struct list_head *)POISON_ADDR2;
 }
 
 /**
@@ -257,7 +255,7 @@ static inline void list_replace_rcu(struct list_head *old,
     arch_smp_wmb();
     _new->next->prev = _new;
     _new->prev->next = _new;
-    old->prev = LIST_POISON2;
+    old->prev = (struct list_head *)POISON_ADDR2;
 }
 
 /**
@@ -724,8 +722,8 @@ static inline void __hlist_del(struct hlist_node *n)
 static inline void hlist_del(struct hlist_node *n)
 {
     __hlist_del(n);
-    n->next = LIST_POISON1;
-    n->pprev = LIST_POISON2;
+    n->next = (struct hlist_node *)POISON_ADDR1;
+    n->pprev = (struct hlist_node **)POISON_ADDR2;
 }
 
 /**
@@ -750,7 +748,7 @@ static inline void hlist_del(struct hlist_node *n)
 static inline void hlist_del_rcu(struct hlist_node *n)
 {
     __hlist_del(n);
-    n->pprev = LIST_POISON2;
+    n->pprev = (struct hlist_node **)POISON_ADDR2;
 }
 
 static inline void hlist_del_init(struct hlist_node *n)
@@ -779,7 +777,7 @@ static inline void hlist_replace_rcu(struct hlist_node *old,
     if (next)
         _new->next->pprev = &_new->next;
     *_new->pprev = _new;
-    old->pprev = LIST_POISON2;
+    old->pprev = (struct hlist_node **)POISON_ADDR2;
 }
 
 static inline void hlist_add_head(struct hlist_node *n, struct hlist_head *h)

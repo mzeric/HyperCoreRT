@@ -145,6 +145,7 @@ cc_library(
     name = "hyper-core",
     srcs = glob(
         ["src/core/**/*.c",
+        "src/core/**/*.cc",
         "src/core/**/*.h"],
     ) + ["src/main.c"],
     hdrs = glob(["include/**/*.h"]),
@@ -153,6 +154,9 @@ cc_library(
         "-ffreestanding",
         "-fno-stack-protector",
         "-fno-builtin",
+        "-fno-exceptions",
+        "-fno-rtti",
+        "-fno-threadsafe-statics",
         "-O0",
         "-g",
     ] + select({
