@@ -200,6 +200,12 @@ void ipi_broadcast_others(uint8_t ipi_vec)
     ipi_broadcast_sgi(ipi_vec);
 }
 
+void ipi_send_reschedule(int target_cpu)
+{
+    if (target_cpu != cpu_id())
+        ipi_send_cpu(target_cpu, IPI_RESCHEDULE);
+}
+
 void ipi_handle(uint8_t ipi_vec)
 {
     switch (ipi_vec) {

@@ -2,6 +2,7 @@
 #include "sched_simple.h"
 #include "spin_lock.h"
 #include "smp.h"
+#include "ipi.h"
 #include "stdbool.h"
 #include "vmio.h"
 
@@ -78,7 +79,12 @@ void simple_scheduler_sched(hyper_task_t *task)
 {
     arch_spin_lock(&g_sched_lock);
     __insert_task_sorted(&g_ready_list, task);
+    int target = task->pcpu_affinity;
     arch_spin_unlock(&g_sched_lock);
+
+    /* Kick target pCPU so it picks up the new task immediately */
+    if (target >= 0 && target != cpu_id())
+        ipi_send_reschedule(target);
 }
 
 void simple_scheduler_yield(hyper_task_t *task)

@@ -10,6 +10,9 @@
  * target_cpu: linear CPU ID (not MPIDR). */
 void ipi_send_cpu(int target_cpu, uint8_t ipi_vec);
 
+/* Kick target pCPU to re-enter scheduler. */
+void ipi_send_reschedule(int target_cpu);
+
 /* Send an IPI to all other pCPUs. */
 void ipi_broadcast_others(uint8_t ipi_vec);
 
