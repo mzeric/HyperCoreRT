@@ -17,11 +17,7 @@
 
 #include <stddef.h>
 #include <inttypes.h>
-
-extern "C" {
-void *kmalloc(uint64_t size);
-void *kfree(void *ptr);
-}
+#include "kmalloc.h"
 
 /* ---- placement new ---- */
 
@@ -111,13 +107,17 @@ void __cxa_guard_abort(unsigned long long *guard)
     /* Nothing to do */
 }
 
+} /* extern "C" */
+
 /* Global constructor/destructor runner */
 typedef void (*cxx_init_func_t)();
 
+extern "C" {
 extern cxx_init_func_t __init_array_start[];
 extern cxx_init_func_t __init_array_end[];
 extern cxx_init_func_t __fini_array_start[];
 extern cxx_init_func_t __fini_array_end[];
+}
 
 void cxx_run_global_ctors()
 {
@@ -130,5 +130,3 @@ void cxx_run_global_dtors()
     for (cxx_init_func_t *fn = __fini_array_start; fn < __fini_array_end; ++fn)
         (*fn)();
 }
-
-} /* extern "C" */

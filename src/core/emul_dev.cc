@@ -8,7 +8,6 @@
 #include "emul_uart.h"
 #include <string.h>
 
-
 static struct list_head g_all_drivers;
 
 int pl011_read(struct emul_device *dev, uint64_t addr, int len, uint64_t *value) {
@@ -52,7 +51,7 @@ void probe_emul_dev(struct mem_region *region) {
 
     list_for_each_entry(pos, &g_all_drivers, list) {
         if(strcmp(pos->name, region->match_name) == 0) {
-            struct emul_device *dev = kmalloc(sizeof(struct emul_device));
+            struct emul_device *dev = (struct emul_device *)kmalloc(sizeof(struct emul_device));
             memset(dev, 0, sizeof(struct emul_device));
 
 
@@ -61,3 +60,4 @@ void probe_emul_dev(struct mem_region *region) {
         }
     }
 }
+

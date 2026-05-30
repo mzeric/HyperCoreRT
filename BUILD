@@ -51,14 +51,13 @@ cc_library(
     srcs = select({
         "@platforms//cpu:aarch64": glob(
             [
-                "src/arch/aarch64/**/*.c",
                 "src/arch/aarch64/**/*.cc",
                 "src/arch/aarch64/**/*.h",
             ],
         ),
         "@platforms//cpu:riscv64": glob(
             [
-                "src/arch/riscv64/**/*.c",
+                "src/arch/riscv64/**/*.cc",
                 "src/arch/riscv64/**/*.h",
             ],
         ),
@@ -101,9 +100,12 @@ cc_library(
 
 cc_library(
     name = "utils",
-    srcs = glob(["src/utils/**/*.c"]),
+    srcs = glob(["src/utils/**/*.c", "src/utils/**/*.cc"]),
     copts = [
         "-Wall",
+        "-fno-exceptions",
+        "-fno-rtti",
+        "-fno-threadsafe-statics",
     ]+ select({
         "@platforms//cpu:riscv64":["-mcmodel=medany"],
         "//conditions:default": []
@@ -148,10 +150,9 @@ cc_library(
 cc_library(
     name = "hyper-core",
     srcs = glob(
-        ["src/core/**/*.c",
-        "src/core/**/*.cc",
+        ["src/core/**/*.cc",
         "src/core/**/*.h"],
-    ) + ["src/main.c"],
+    ) + ["src/main.cc"],
     hdrs = glob(["include/**/*.h"]),
     copts = [
         "-Wall",

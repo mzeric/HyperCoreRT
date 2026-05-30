@@ -84,8 +84,8 @@
 
 #include <stdint.h>
 
-
 int pl011_putc(const char c);
 int pl011_init(uintptr_t base);
+
 
 #endif /*__ASSEMBLER__*/

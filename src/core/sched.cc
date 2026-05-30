@@ -124,7 +124,7 @@ int create_task(const char *name, void *entry, int priority) {
     arch_vcpu_init(task->vcpu, (uintptr_t)entry, stack_ptr);
     init_task_regs(task, entry, stack_ptr);
     if (name)
-        memcpy(task->name, name, min(sizeof(task->name), strlen(name)));
+        memcpy(task->name, name, sizeof(task->name) < strlen(name) ? sizeof(task->name) : strlen(name));
 
     hyper_info("init done");
     simple_scheduler_sched(task);
@@ -191,7 +191,7 @@ int create_task2(const char *name, void *entry, int priority) {
     arch_vcpu_init(task->vcpu, (uintptr_t)entry, stack_ptr);
     init_task_regs2(task, entry, stack_ptr);
     if (name)
-        memcpy(task->name, name, min(sizeof(task->name), strlen(name)));
+        memcpy(task->name, name, sizeof(task->name) < strlen(name) ? sizeof(task->name) : strlen(name));
 
     hyper_info("init done");
     simple_scheduler_sched(task);
@@ -215,7 +215,7 @@ static void mTaskEntry(void)
 int create_task3(const char *name, void *__entry, int priority) {
     hyper_task_t *task;
 
-    void *entry = &mTaskEntry;
+    void *entry = (void *)&mTaskEntry;
 
     task = (hyper_task_t *)kmalloc(sizeof(hyper_task_t));
 
@@ -238,7 +238,7 @@ int create_task3(const char *name, void *__entry, int priority) {
     arch_vcpu_init(task->vcpu, (uintptr_t)entry, stack_ptr);
     init_task_regs2(task, entry, stack_ptr);
     if (name)
-        memcpy(task->name, name, min(sizeof(task->name), strlen(name)));
+        memcpy(task->name, name, sizeof(task->name) < strlen(name) ? sizeof(task->name) : strlen(name));
 
     hyper_info("init done");
     simple_scheduler_sched(task);

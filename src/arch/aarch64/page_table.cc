@@ -21,7 +21,7 @@ uint64_t pte_offset(vaddr_t virt, uint8_t level) {
 void build_s2_table(lpae_t *cur_table, vaddr_t next_table, vaddr_t virt, uint8_t level, int attr) {
     int     idx = pte_offset(virt, level);
     paddr_t addr = vir_to_phy(next_table);
-    cur_table[idx] = make_stage2_entry(addr, attr, MEM_ACCESS_RWX);
+    cur_table[idx] = make_stage2_entry(addr, (enum mem_type)attr, MEM_ACCESS_RWX);
 }
 
 void build_hyper_table(lpae_t *table_current_level, vaddr_t next_tbl, vaddr_t virt, uint8_t level,

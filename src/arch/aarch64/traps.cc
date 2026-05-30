@@ -63,7 +63,7 @@ In AArch64 state, an ERET instruction causes an exception return, see ERET on pa
 
 
 
-extern "C" void destroy_task(hyper_task_t *task) {
+void destroy_task(hyper_task_t *task) {
     if (task->regs.sp)
         kfree((void *)task->regs.sp);
 }
@@ -76,7 +76,7 @@ extern "C" void do_bad_mode(struct cpu_user_regs *regs, int is_compat) {
 
 }
 
-extern "C" void dump_regs(struct cpu_user_regs *regs) {
+void dump_regs(struct cpu_user_regs *regs) {
     hyper_printf("x0=%lx x1=%lx x2=%lx x3=%lx\n",
                  regs->x0, regs->x1, regs->x2, regs->x3);
     hyper_printf("x4=%lx x5=%lx x6=%lx x7=%lx\n",
@@ -365,7 +365,7 @@ extern "C" void do_hyper_sync(struct cpu_user_regs *regs, int magic) {
     panic("hyper_sync");
 }
 
-void on_guest_excep_return(void ){
+extern "C" void on_guest_excep_return(void ){
 
 }
 

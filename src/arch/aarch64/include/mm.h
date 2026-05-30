@@ -4,10 +4,6 @@
 #include "lpae.h"
 #include "arch_page.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 
 
 extern void *_hyper_start, *_hyper_end;
@@ -57,6 +53,3 @@ void page_summary();
 void *ioremap(paddr_t phy, int size, int attr);
 void  iounmap(vaddr_t vir, int size);
 
-#ifdef __cplusplus
-}
-#endif

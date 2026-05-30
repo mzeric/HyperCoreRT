@@ -5,11 +5,14 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "pl011",
     srcs = glob([
-        "pl011/*.c",
+        "pl011/*.cc",
     ]),
     hdrs = glob(["pl011/**/*.h"]),
     copts = [
         "-Wall",
+        "-fno-exceptions",
+        "-fno-rtti",
+        "-fno-threadsafe-statics",
     ],
     deps = [
         "//:common_headers",
@@ -21,7 +24,6 @@ cc_library(
 cc_library(
     name = "gic",
     srcs = glob([
-        "gic/*.c",
         "gic/*.cc",
     ]),
     hdrs = glob(["gic/*.h"]),

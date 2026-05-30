@@ -1,6 +1,11 @@
 #include "vmio.h"
 #include "fdt_helper.h"
 
+/* FDT_RO_PROBE is a macro from libfdt_internal.h (C-only).
+ * Replicate its check inline for C++ translation units. */
+#define FDT_RO_PROBE_CPP(fdt) \
+    do { if (fdt_check_header(fdt) != 0) return -1; } while (0)
+
 int fdt_node_offset(const void *fdt, int startoffset,
 				  const char *propname,
 				  const void *propval, int proplen)
@@ -10,7 +15,7 @@ int fdt_node_offset(const void *fdt, int startoffset,
 	int len;
     int depth;
 
-	FDT_RO_PROBE(fdt);
+	FDT_RO_PROBE_CPP(fdt);
 
 	/* FIXME: The algorithm here is pretty horrible: we scan each
 	 * property of a node in fdt_getprop(), then if that didn't
@@ -39,7 +44,7 @@ const void* get_tree_prop(const void *fdt, int node, int top_stop_node, const ch
         return NULL;
 
     // 尝试获取当前节点的属性
-    prop_val = fdt_getprop(fdt, node, prop, &len);
+    prop_val = (const fdt32_t *)fdt_getprop(fdt, node, prop, &len);
     if (prop_val)
         return prop_val;
 
@@ -54,8 +59,8 @@ void fdt_get_cur_as(void *fdt, int node, int *na, int *ns) {
     const u32 *num_addr, *num_size;
     int a = 2, s = 2;
 
-    num_addr = get_tree_prop(fdt, node, -1, "#address-cells");
-    num_size = get_tree_prop(fdt, node, -1, "#size-cells");
+    num_addr = (const u32 *)get_tree_prop(fdt, node, -1, "#address-cells");
+    num_size = (const u32 *)get_tree_prop(fdt, node, -1, "#size-cells");
 
     if (num_addr)
         a = fdt32_to_cpu(*(fdt32_t*)num_addr);
@@ -74,7 +79,7 @@ int fdt_get_reg_info(void *fdt, int node, uint64_t *addr, uint64_t *size) {
 
     fdt_get_cur_as(fdt, node, &na, &ns);
 
-    const u32 *p = fdt_getprop(fdt, node, "reg", &len);
+    const u32 *p = (const u32 *)fdt_getprop(fdt, node, "reg", &len);
 
     if(!p) {
         hyper_err("reg <> not found");

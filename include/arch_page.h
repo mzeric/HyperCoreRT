@@ -3,10 +3,6 @@
 #include "htypes.h"
 #include "spin_lock.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef MB
 #define MB(x) ((x) << 20)
 #endif
@@ -75,6 +71,3 @@ int host_map_one_page(vaddr_t vir, paddr_t phy, int attr);
 void host_unmap_one_page(vaddr_t vir);
 // void host_unmap_pages(vaddr_t vir, int size);
 
-#ifdef __cplusplus
-}
-#endif

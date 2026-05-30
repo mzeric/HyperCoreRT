@@ -127,3 +127,4 @@ lpae_t make_stage2_entry(paddr_t pa, enum mem_type type, enum mem_access access)
     lpae_set_mfn(e, pa >> PAGE_SHIFT);
     return e;
 }
+

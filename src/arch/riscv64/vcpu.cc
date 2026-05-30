@@ -13,7 +13,7 @@ int arch_vcpu_reset(vcpu_t *vcpu) {
 vcpu_t *create_vcpu(int vcpu_d, int priority) {
     vcpu_t *vcpu = NULL;
 
-    if (!(vcpu = kmalloc(sizeof(vcpu_t)))) {
+    if (!(vcpu = (vcpu_t *)kmalloc(sizeof(vcpu_t)))) {
         hyper_fatal("alloc vcpu struct failed");
         return NULL;
     }
@@ -28,7 +28,7 @@ vcpu_t *create_vcpu(int vcpu_d, int priority) {
 
     /* need tasklet here */
 
-    vcpu->arch.stack = kmalloc(VCPU_STACK_SIZE) + VCPU_STACK_SIZE;
+    vcpu->arch.stack = (char *)kmalloc(VCPU_STACK_SIZE) + VCPU_STACK_SIZE;
     // vcpu->arch.saved_context.sp =
     arch_vcpu_reset(vcpu);
 

@@ -36,3 +36,4 @@ void init_percpu_area(void)
 
     hyper_info("percpu area: %lu bytes/cpu, %d cpus", per_cpu_size, CONFIG_SMP_CPU_NUM);
 }
+

@@ -1,5 +1,3 @@
-extern "C" {
-
 #include "io.h"
 #include "sys_reg.h"
 #include "arch_barrier.h"
@@ -282,4 +280,3 @@ void ipi_call_func(int target_cpu, ipi_func_t fn, void *arg)
     ipi_send_cpu(target_cpu, IPI_CALL_FUNC);
 }
 
-} /* extern "C" */

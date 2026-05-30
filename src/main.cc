@@ -41,6 +41,6 @@ int c_main(uintptr_t dtb_phys) {
 #warning "unknown arch"
 #endif
 
-void _reset(uint64_t dtb_phys) {
+extern "C" void _reset(uint64_t dtb_phys) {
     c_main((uintptr_t)dtb_phys);
 }

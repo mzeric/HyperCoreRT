@@ -5,10 +5,6 @@
 #include "config.h"
 #include "log.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 void panic(const char *msg);
 
 /* Runtime log level — defined in log.c. */
@@ -58,7 +54,3 @@ extern int g_log_level;
 #define __INIT__    __attribute__((section))
 
 #undef printf
-
-#ifdef __cplusplus
-}
-#endif

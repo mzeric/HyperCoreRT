@@ -2,10 +2,12 @@
 #include <stdint.h>
 #include "safe_printf.h"
 
+extern "C" {
+
 #pragma GCC diagnostic ignored "-Wnonnull-compare"
 
 void __memset(void*src, int v, int64_t cnt) {
-    char *p = src;
+    char *p = (char*)src;
 
     while (cnt-- > 0){
         *p++ = v;
@@ -13,8 +15,8 @@ void __memset(void*src, int v, int64_t cnt) {
 }
 
 void *memmove(void *dst, const void *src, size_t cnt) {
-    char *pd = dst;
-    const char *ps = src;
+    char *pd = (char*)dst;
+    const char *ps = (const char*)src;
     for (size_t i = 0; i < cnt; ++i)
         *pd ++ = *ps++;
     return dst;
@@ -29,7 +31,7 @@ int memcmp(const void *s1, const void *s2, size_t n) {
     int count = n;
 
     // tail
-    for (cu1 = s1, cu2 = s2; 0 < count; ++cu1, ++cu2, count--)
+    for (cu1 = (const uint8_t*)s1, cu2 = (const uint8_t*)s2; 0 < count; ++cu1, ++cu2, count--)
         if ((res = *cu1 - *cu2) != 0)
             break;
 
@@ -73,3 +75,5 @@ int strcmp(const char *a, const char *b)
     for (; *a == *b && *a != '\0'; a++, b++);
     return *a - *b;
 }
+
+} /* extern "C" */

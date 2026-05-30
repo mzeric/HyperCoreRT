@@ -156,3 +156,4 @@ vcpu_t *create_vcpu(int vcpu_d, int priority);
 int     arch_vcpu_init(vcpu_t *vcpu, uintptr_t entry, uintptr_t stack);
 void    vcpu_context_save(vcpu_t *vcpu);
 void    vcpu_context_restore(vcpu_t *vcpu);
+

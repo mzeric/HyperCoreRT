@@ -7,8 +7,6 @@
 #include "src/drivers/gic/gicv3.h"
 #include "sys_reg.h"
 
-extern "C" {
-
 /* Bit layout per ARM ARM D13.4.x for ICH_LR<n>_EL2 (64-bit). */
 #define ICH_LR_VINTID(v)   ((u64)((v) & 0xffffffffULL))
 #define ICH_LR_PINTID(p)   (((u64)((p) & 0x3ffULL)) << 32)
@@ -140,7 +138,7 @@ static void gic_emul_probe_cpuif_caps(void)
 {
 	u64 vtr = mrs_s(ENC_ICH_VTR_EL2);
 	u32 count = (vtr & 0x1f) + 1;
-	g_vgic_lr_count = min(count, (u32)VCPU_MAX_VGIC_LRS);
+	g_vgic_lr_count = (count < (u32)VCPU_MAX_VGIC_LRS ? count : (u32)VCPU_MAX_VGIC_LRS);
 	g_vgic_apr_count = 1;
 }
 
@@ -178,7 +176,7 @@ void gic_vcpu_restore(vcpu_t *vcpu)
 			gic_emul_v3_write_ap0r(i, vcpu->arch.vgic.ap0r[i]);
 			gic_emul_v3_write_ap1r(i, vcpu->arch.vgic.ap1r[i]);
 		}
-		for (u32 i = 0; i < min(vcpu->arch.vgic.lr_count, gic_emul_lr_count()); ++i)
+		for (u32 i = 0; i < (vcpu->arch.vgic.lr_count < gic_emul_lr_count() ? vcpu->arch.vgic.lr_count : gic_emul_lr_count()); ++i)
 			gic_emul_v3_write_lr(i, vcpu->arch.vgic.lr[i]);
 		msr_s(ENC_ICH_HCR_EL2, vcpu->arch.vgic.hcr | MY_ICH_HCR_EN);
 	} else {
@@ -322,5 +320,3 @@ hyper_task_t *find_task_by_mpidr(uint64_t mpidr) {
 	}
 	return NULL;
 }
-
-} /* extern "C" */

@@ -32,18 +32,18 @@ static GlobalDevice g_device;
 
 }  // namespace modern
 
-extern "C" int modern_cpp_smoke(void)
+int modern_cpp_smoke(void)
 {
     modern::Device dev;
     return dev.id();
 }
 
-extern "C" int modern_cpp_global_ctor_smoke(void)
+int modern_cpp_global_ctor_smoke(void)
 {
     return modern::g_device.ok();
 }
 
-extern "C" int modern_cpp_raii_lock_smoke(void)
+int modern_cpp_raii_lock_smoke(void)
 {
     static spinlock_t test_lock = { .lock = 0 };
     int val = 0;

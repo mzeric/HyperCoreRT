@@ -10,10 +10,6 @@
 
 typedef void (*ipi_func_t)(void *arg);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* Send an IPI to a specific target pCPU.
  * target_cpu: linear CPU ID (not MPIDR). */
 void ipi_send_cpu(int target_cpu, uint8_t ipi_vec);
@@ -36,6 +32,3 @@ void ipi_tlb_shootdown(void);
 /* Execute a function on a target pCPU. */
 void ipi_call_func(int target_cpu, ipi_func_t fn, void *arg);
 
-#ifdef __cplusplus
-}
-#endif

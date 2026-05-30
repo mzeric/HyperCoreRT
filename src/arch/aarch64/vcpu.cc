@@ -92,7 +92,7 @@ static void vcpu_fpsimd_restore(vcpu_t *vcpu)
 }
 
 struct mem_region *new_mem_regon(char *name, u64 gpa, u64 hpa, u64 size, int attr) {
-    struct mem_region *region = kmalloc(sizeof(struct mem_region));
+    struct mem_region *region = (struct mem_region *)kmalloc(sizeof(struct mem_region));
     memset(region, 0, sizeof(struct mem_region));
     region->gpa = gpa;
     region->hpa = hpa;
@@ -176,7 +176,7 @@ vcpu_t *create_vcpu(int vcpu_d, int priority) {
 
     vcpu_t *vcpu = NULL;
 
-    if(!(vcpu = kmalloc(sizeof(vcpu_t)))){
+    if(!(vcpu = (vcpu_t *)kmalloc(sizeof(vcpu_t)))){
         hyper_fatal("alloc vcpu struct failed");
         return NULL;
     }
@@ -191,7 +191,7 @@ vcpu_t *create_vcpu(int vcpu_d, int priority) {
 
     /* need tasklet here */
 
-    vcpu->arch.stack = kmalloc(VCPU_STACK_SIZE) + VCPU_STACK_SIZE;
+    vcpu->arch.stack = (char *)kmalloc(VCPU_STACK_SIZE) + VCPU_STACK_SIZE;
     //vcpu->arch.saved_context.sp =
     arch_vcpu_reset(vcpu);
 
@@ -361,3 +361,4 @@ void test_vcpu() {
     vcpu_context_save(vcpu);
 
 }
+

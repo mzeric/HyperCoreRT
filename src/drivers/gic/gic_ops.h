@@ -10,10 +10,6 @@
 
 #include "mmio.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /*******************************************************************************
  * GIC Distributor interface register accessors that are common to GICv3 & GICv2
  ******************************************************************************/
@@ -74,6 +70,3 @@ void gicd_set_icactiver(uintptr_t base, unsigned int id);
 void gicd_set_ipriorityr(uintptr_t base, unsigned int id, unsigned int pri);
 void gicd_set_icfgr(uintptr_t base, unsigned int id, unsigned int cfg);
 
-#ifdef __cplusplus
-}
-#endif

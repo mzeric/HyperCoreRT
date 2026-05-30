@@ -4,6 +4,7 @@
 #include "page.h"
 #include "arch_page.h"
 #include "spin_lock.h"
+#include "kmalloc.h"
 
 static void *g_kmalloc_handler;
 static void *g_kmalloc_heap;
@@ -37,7 +38,7 @@ void *kmalloc(uint64_t size) {
     arch_spin_lock(&g_kmalloc_lock);
     void *ptr = tlsf_malloc(g_kmalloc_handler, size);
     arch_spin_unlock(&g_kmalloc_lock);
-    if (ptr < g_kmalloc_heap) {
+    if ((uintptr_t)ptr < (uintptr_t)g_kmalloc_heap) {
         hyper_err("tlsf_malloc wired return :%p", ptr);
         // panic("kmalloc");
     }
@@ -97,4 +98,5 @@ void dump_kmalloc_status() {
              arg[1],
              (double)arg[0] / arg[1] * 100);
 }
+
 

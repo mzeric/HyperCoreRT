@@ -30,14 +30,13 @@
 
 #include <ioremap.h>
 
-
-extern void timer_init();
+void timer_init(void);
 
 #ifdef CONFIG_BOARD_QEMU_VIRT
-void arch_putchar(char ch) { *(volatile int *)0x09000000 = ch; }
+extern "C" void arch_putchar(char ch) { *(volatile int *)0x09000000 = ch; }
 
-#elif CONFIG_BOARD_FVP_AEMVA
-void arch_putchar(char ch) { *(volatile int *)0x1c090000 = ch; }
+#elif defined(CONFIG_BOARD_FVP_AEMVA)
+extern "C" void arch_putchar(char ch) { *(volatile int *)0x1c090000 = ch; }
 #endif
 
 struct mmu_lpae_entry_ctrl {
@@ -144,7 +143,8 @@ int get_phys_id() {
 
 int get_phys_bits() {
     uint64_t id0 = mrs(ID_AA64MMFR0_EL1);
-    return min(id2pa_range(id0 & 0xF), 48);
+    int v = id2pa_range(id0 & 0xF);
+    return (v < 48) ? v : 48;
 }
 
 #define HYPER_DEFAULT_GUEST_ENTRY      0x50200000ULL
@@ -219,7 +219,7 @@ static int fdt_get_inherited_cell_count(void *fdt, int node, const char *name, i
     int len;
 
     while (node >= 0) {
-        const fdt32_t *prop = fdt_getprop(fdt, node, name, &len);
+        const fdt32_t *prop = (const fdt32_t *)fdt_getprop(fdt, node, name, &len);
         if (prop && len >= (int)sizeof(fdt32_t))
             return fdt32_to_cpu(prop[0]);
         node = fdt_parent_offset(fdt, node);
@@ -233,7 +233,7 @@ static int fdt_get_reg_entry(void *fdt, int node, int index, u64 *addr, u64 *siz
     int parent = fdt_parent_offset(fdt, node);
     int na = fdt_get_inherited_cell_count(fdt, parent, "#address-cells", 2);
     int ns = fdt_get_inherited_cell_count(fdt, parent, "#size-cells", 2);
-    const fdt32_t *p = fdt_getprop(fdt, node, "reg", &len);
+    const fdt32_t *p = (const fdt32_t *)fdt_getprop(fdt, node, "reg", &len);
 
     if (!p)
         return -1;
@@ -251,7 +251,7 @@ static int fdt_get_reg_entry(void *fdt, int node, int index, u64 *addr, u64 *siz
 static int fdt_read_u32_prop(void *fdt, int node, const char *name, u32 *value)
 {
     int len;
-    const fdt32_t *prop = fdt_getprop(fdt, node, name, &len);
+    const fdt32_t *prop = (const fdt32_t *)fdt_getprop(fdt, node, name, &len);
 
     if (!prop || len < (int)sizeof(fdt32_t))
         return -1;
@@ -262,7 +262,7 @@ static int fdt_read_u32_prop(void *fdt, int node, const char *name, u32 *value)
 static int fdt_read_u64_prop(void *fdt, int node, const char *name, u64 *value)
 {
     int len;
-    const fdt32_t *prop = fdt_getprop(fdt, node, name, &len);
+    const fdt32_t *prop = (const fdt32_t *)fdt_getprop(fdt, node, name, &len);
 
     if (!prop || len < (int)sizeof(fdt32_t))
         return -1;
@@ -273,7 +273,7 @@ static int fdt_read_u64_prop(void *fdt, int node, const char *name, u64 *value)
 static int fdt_read_gic_interrupt(void *fdt, int node, int index, u32 *intid)
 {
     int len;
-    const fdt32_t *prop = fdt_getprop(fdt, node, "interrupts", &len);
+    const fdt32_t *prop = (const fdt32_t *)fdt_getprop(fdt, node, "interrupts", &len);
     int off = index * 3;
     u32 type;
     u32 irq;
@@ -385,14 +385,14 @@ static void parse_guest_vcpus(void *fdt, int guest_node, struct hyper_config *cf
     const fdt32_t *mpidrs;
 
     if (!fdt_read_u32_prop(fdt, guest_node, "vcpu-count", &count)) {
-        cfg->guest.vcpu_count = min(count, (u32)HYPER_MAX_VCPUS);
+        cfg->guest.vcpu_count = (count < (u32)HYPER_MAX_VCPUS) ? count : (u32)HYPER_MAX_VCPUS;
         for (u32 i = 0; i < cfg->guest.vcpu_count; ++i)
             cfg->guest.vcpu_mpidr[i] = i;
     }
 
-    mpidrs = fdt_getprop(fdt, guest_node, "vcpu-mpidrs", &len);
+    mpidrs = (const fdt32_t *)fdt_getprop(fdt, guest_node, "vcpu-mpidrs", &len);
     if (mpidrs) {
-        u32 n = min((u32)(len / (2 * sizeof(fdt32_t))), (u32)HYPER_MAX_VCPUS);
+        u32 n = ((u32)(len / (2 * sizeof(fdt32_t))) < (u32)HYPER_MAX_VCPUS) ? (u32)(len / (2 * sizeof(fdt32_t))) : (u32)HYPER_MAX_VCPUS;
         cfg->guest.vcpu_count = n;
         for (u32 i = 0; i < n; ++i)
             cfg->guest.vcpu_mpidr[i] = fdt_read_cells(mpidrs + i * 2, 2);
@@ -445,7 +445,7 @@ static void validate_guest_dtb_config(struct hyper_config *cfg)
     }
 
     for (int node = fdt_first_subnode(fdt, cpus_node); node >= 0; node = fdt_next_subnode(fdt, node)) {
-        const char *type = fdt_getprop(fdt, node, "device_type", NULL);
+        const char *type = (const char *)fdt_getprop(fdt, node, "device_type", NULL);
         if (!type || strcmp(type, "cpu"))
             continue;
         if (fdt_get_reg_entry(fdt, node, 0, &addr, &size)) {
@@ -889,7 +889,7 @@ int init_hyper_low_level(void *args) {
         safe_printf("switch to EL2...\n");
         isb();
         arch_mb();
-        switch_to_el2(NULL, __init_hyper_low_level, args);
+        switch_to_el2(NULL, (void *)__init_hyper_low_level, args);
         // __armv8_switch_to_el2(__init_hyper_low_level, 1);
         // asm volatile("msr ");
     }
@@ -973,3 +973,4 @@ int __init_hyper_low_level(void *args)
         ;
     return 0;
 }
+

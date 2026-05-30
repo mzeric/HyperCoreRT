@@ -97,7 +97,7 @@ static uint64_t _find_next_bit(const uint64_t *addr, uint64_t nbits, uint64_t st
         tmp = addr[start / BITS_PER_UINT64] ^ invert;
     }
 
-    return min(start + __ffsl(tmp), nbits);
+    return (start + __ffsl(tmp) < nbits ? start + __ffsl(tmp) : nbits);
 }
 
 uint64_t find_next_bit(const uint64_t *addr, uint64_t size, uint64_t offset) {
@@ -137,3 +137,4 @@ uint64_t bitmap_find_next_zero_area(uint64_t *map, uint64_t size, uint64_t start
 }
 
 void init_bitmap(uint64_t *bitmap, uint64_t len) { memset(bitmap, 0, len); }
+

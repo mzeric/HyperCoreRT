@@ -62,10 +62,6 @@ struct gic_vcpu_sgi {
 	bool irm;
 };
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 int gic_vcpu_send_sgi(const struct gic_vcpu_sgi *sgi);
 
 /* Queue a vIRQ (PPI or SGI) for delivery to the given task's vcpu.
@@ -85,7 +81,3 @@ void gic_vcpu_restore(vcpu_t *vcpu);
 /* Called from __el2_switch_to to push pending vIRQs into ICH_LR for the
    next-to-run task. */
 void gic_vcpu_flush_lr(hyper_task_t *task);
-
-#ifdef __cplusplus
-}
-#endif

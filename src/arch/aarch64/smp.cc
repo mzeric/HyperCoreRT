@@ -94,14 +94,14 @@ static int parse_host_cpus(void *fdt)
 
         /* Read reg = MPIDR affinity */
         int len;
-        const fdt32_t *reg = fdt_getprop(fdt, node, "reg", &len);
+        const fdt32_t *reg = (const fdt32_t *)fdt_getprop(fdt, node, "reg", &len);
         if (!reg)
             continue;
 
         int parent = fdt_parent_offset(fdt, node);
         int na = 2; /* default #address-cells */
         int na_len;
-        const fdt32_t *na_prop = fdt_getprop(fdt, parent, "#address-cells", &na_len);
+        const fdt32_t *na_prop = (const fdt32_t *)fdt_getprop(fdt, parent, "#address-cells", &na_len);
         if (na_prop && na_len >= 4)
             na = fdt32_to_cpu(na_prop[0]);
 
@@ -114,7 +114,7 @@ static int parse_host_cpus(void *fdt)
         mpidr &= 0xff00ffffffULL;
 
         /* Skip non-PSCI CPUs */
-        const char *method = fdt_getprop(fdt, node, "enable-method", &len);
+        const char *method = (const char *)fdt_getprop(fdt, node, "enable-method", &len);
         if (!method || strncmp(method, "psci", 4) != 0)
             continue;
 
@@ -136,7 +136,7 @@ static int parse_host_cpus(void *fdt)
 
 extern void gic_vcpu_init_pcpu(void);
 
-void secondary_start(void)
+extern "C" void secondary_start(void)
 {
     int cpu = smp_current_cpu_id();
     uint64_t mpidr = smp_id();

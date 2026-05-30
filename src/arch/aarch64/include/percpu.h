@@ -17,3 +17,4 @@ extern unsigned long __per_cpu_offset[CONFIG_SMP_CPU_NUM];
 
 /* Initialize per-CPU memory areas. Must be called after init_mm(). */
 void init_percpu_area(void);
+

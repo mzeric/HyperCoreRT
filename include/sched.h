@@ -43,10 +43,6 @@ typedef struct hyper_task {
 
 
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 int init_sched();
 int create_task(const char *name, void *entry, int priority);
 int create_task2(const char *name, void *entry, int priority);
@@ -60,7 +56,3 @@ void set_current(void *c);
 extern hyper_task_t *g_running[CONFIG_SMP_CPU_NUM];
 
 void sched_yield2(struct cpu_user_regs *irq_reg);
-
-#ifdef __cplusplus
-}
-#endif

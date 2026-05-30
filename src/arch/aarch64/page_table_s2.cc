@@ -127,7 +127,7 @@ int stage2_map_4k(lpae_t *root, int start_level, vaddr_t vaddr, paddr_t paddr, i
     lpae_t *pte = table + pte_offset(vaddr, level);
 
     // hyper_debug("pte:%p = %p + %x", pte, table, pte_offset(vaddr, level));
-    write_pte(pte, make_stage2_entry(paddr, attr, acc));
+    write_pte(pte, make_stage2_entry(paddr, (enum mem_type)attr, (enum mem_access)acc));
     if (end_level != 3)
         pte->walk.table = 0; //?
 
@@ -251,7 +251,7 @@ int build_static_stage2_page_table(vaddr_t virt_start, paddr_t phys_start, uint6
 
     do {
 
-        *entry = make_stage2_entry(next_tbl, attr, MEM_ACCESS_RWX);
+        *entry = make_stage2_entry(next_tbl, (enum mem_type)attr, MEM_ACCESS_RWX);
         entry->p2m.xn = 1;
         next_tbl += PAGE_SIZE;
         addr += ARM_PT_LEVEL_SIZE(2);
@@ -271,10 +271,11 @@ int build_static_stage2_page_table(vaddr_t virt_start, paddr_t phys_start, uint6
 
     do {
 
-        *entry = make_stage2_entry(phy_start, attr, MEM_ACCESS_RWX);
+        *entry = make_stage2_entry(phy_start, (enum mem_type)attr, MEM_ACCESS_RWX);
         phy_start += ARM_PT_LEVEL_SIZE(3);
 
     } while (entry++, phy_start < phy_end);
 
     return 0;
 }
+

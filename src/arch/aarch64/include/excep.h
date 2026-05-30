@@ -1,10 +1,6 @@
 #pragma once
 #include "htypes.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 union esr {
     uint32_t bits;
     struct {
@@ -63,7 +59,3 @@ void panic(const char* msg);
 uint64_t get_default_hcr_flags(void);
 void switch_to_el1(void);
 void print_iss_detail(const union esr esr);
-
-#ifdef __cplusplus
-}
-#endif

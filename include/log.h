@@ -2,10 +2,6 @@
 
 #include "config.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* Output mode for log_putchar */
 enum log_output_mode {
     LOG_OUTPUT_UART   = 1 << 0,  /* write to UART */
@@ -13,7 +9,11 @@ enum log_output_mode {
     LOG_OUTPUT_BOTH   = LOG_OUTPUT_UART | LOG_OUTPUT_BUF,
 };
 
-/* Write one character through the log subsystem (ring buffer + UART). */
+/* Write one character through the log subsystem (ring buffer + UART).
+ * extern "C" because guest test code (C) provides the definition. */
+#ifdef __cplusplus
+extern "C"
+#endif
 void log_putchar(char ch);
 
 /* Acquire/release the log spinlock (for SMP-safe whole-message output). */
@@ -30,6 +30,3 @@ int  log_get_level(void);
 /* Set output mode (UART only / buffer only / both). */
 void log_set_output(unsigned int mode);
 
-#ifdef __cplusplus
-}
-#endif

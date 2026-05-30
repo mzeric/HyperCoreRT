@@ -37,9 +37,10 @@ typedef struct bitmap {
 
 bitmap_t create_bitmap(uint64_t start, int ele_size, int bit_nr) {
     bitmap_t b = (bitmap_t){
-        .bit_nr = bit_nr,
-        .ele_size = ele_size,
+        .data = nullptr,
         .start = start,
+        .ele_size = ele_size,
+        .bit_nr = bit_nr,
     };
 
     b.data = (uint64_t *)kmalloc(bit_nr / BITS_PER_BYTE);
@@ -135,3 +136,4 @@ void host_unmap_pages(vaddr_t vir, int size) {
         vir += PAGE_SIZE;
     }
 }
+

@@ -46,6 +46,9 @@ extern "C" {
  * This function is declared here only. You have to write your custom implementation somewhere
  * \param character Character to output
  */
+#ifdef __cplusplus
+extern "C"
+#endif
 void arch_putchar(char character);
 
 
