@@ -1,0 +1,11 @@
+--- a/toolchain/templates/compiler.BUILD
++++ b/toolchain/templates/compiler.BUILD
+@@ -40,7 +40,7 @@
+             srcs = [
+                 PREFIX,
+                 "{}/lib".format(PREFIX),
+-            ] + glob(["lib/gcc/{}/*".format(PREFIX)]),
++            ] + glob(["lib/gcc/{}/**".format(PREFIX)], allow_empty = True),
+         )
+
+ # libraries, headers and executables.

@@ -42,5 +42,11 @@ typedef enum riscv_exception {
 #define IRQ_LOCAL_MAX                      16
 #define IRQ_LOCAL_GUEST_MAX                (32 - 1)
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern void __riscv_vector(void);
 void        setup_exception(void *);
+#ifdef __cplusplus
+}
+#endif

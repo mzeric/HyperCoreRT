@@ -32,6 +32,8 @@ cc_library(
         "-D__ASSEMBLY__",
         "-Wall",
         "-mcmodel=medany",
+        "-march=rv64imac_zicsr",
+        "-mabi=lp64",
     ],
     deps = [
 
@@ -60,6 +62,7 @@ cc_library(
                 "src/arch/riscv64/**/*.cc",
                 "src/arch/riscv64/**/*.h",
             ],
+            exclude = ["src/arch/riscv64/sched_riscv.cc"],
         ),
     }),
     hdrs = glob(["include/**/*.h"]),
@@ -78,7 +81,7 @@ cc_library(
         "-fno-rtti",
         "-fno-threadsafe-statics",
         ] + select({
-            "@platforms//cpu:riscv64":["-mcmodel=medany"],
+            "@platforms//cpu:riscv64":["-mcmodel=medany", "-march=rv64imac_zicsr", "-mabi=lp64"],
             "//conditions:default": [],
         }),
     includes = ["include/"],
@@ -107,7 +110,7 @@ cc_library(
         "-fno-rtti",
         "-fno-threadsafe-statics",
     ]+ select({
-        "@platforms//cpu:riscv64":["-mcmodel=medany"],
+        "@platforms//cpu:riscv64":["-mcmodel=medany", "-march=rv64imac_zicsr", "-mabi=lp64"],
         "//conditions:default": []
     }),
     linkopts = [
@@ -139,7 +142,7 @@ cc_library(
         "-O0",
         "-g",
     ] + select({
-        "@platforms//cpu:riscv64": ["-mcmodel=medany"],
+        "@platforms//cpu:riscv64": ["-mcmodel=medany", "-march=rv64imac_zicsr", "-mabi=lp64"],
         "//conditions:default": [],
     }),
     includes = ["include/"],
@@ -152,7 +155,25 @@ cc_library(
     srcs = glob(
         ["src/core/**/*.cc",
         "src/core/**/*.h"],
-    ) + ["src/main.cc"],
+        exclude = [
+            "src/core/emul_gic.cc",
+            "src/core/emul_gicv3.cc",
+            "src/core/emul_uart.cc",
+            "src/core/emul_dev.cc",
+            "src/core/emul_psci.cc",
+            "src/core/sched.cc",
+        ],
+    ) + select({
+        "@platforms//cpu:aarch64": [
+            "src/core/emul_gic.cc",
+            "src/core/emul_gicv3.cc",
+            "src/core/emul_uart.cc",
+            "src/core/emul_dev.cc",
+            "src/core/emul_psci.cc",
+            "src/core/sched.cc",
+        ],
+        "@platforms//cpu:riscv64": ["src/arch/riscv64/sched_riscv.cc"],
+    }) + ["src/main.cc"],
     hdrs = glob(["include/**/*.h"]),
     copts = [
         "-Wall",
@@ -165,7 +186,7 @@ cc_library(
         "-O0",
         "-g",
     ] + select({
-        "@platforms//cpu:riscv64": ["-mcmodel=medany"],
+        "@platforms//cpu:riscv64": ["-mcmodel=medany", "-march=rv64imac_zicsr", "-mabi=lp64"],
         "//conditions:default": [],
     }),
     includes = [
@@ -193,8 +214,7 @@ genrule(
         ":linker_script",
     ],
     outs = [":linker.lds"],
-    cmd = "$(CC) -E -x c $(location :linker_script) -Iinclude |grep -v \"\\#\" > $@",
-    toolchains = ["@bazel_tools//tools/cpp:current_cc_toolchain"],
+    cmd = "gcc -E -x c $(location :linker_script) -Iinclude | grep -v \"\\#\" > $@",
 )
 
 cc_binary(
@@ -207,7 +227,14 @@ cc_binary(
     ] + [
         "-Wl,-T$(location :linker.lds)",
         "-Wl,--build-id=none",
-    ],
+    ] + select({
+        "@platforms//cpu:riscv64": [
+            "-march=rv64imac_zicsr",
+            "-mabi=lp64",
+            "-Wl,-m,elf64lriscv",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         ":start_head",
         # "aarch64_as",
@@ -221,7 +248,10 @@ genrule(
     name = "bin",
     srcs = [":hyper-elf"],
     outs = ["core.bin"],
-    cmd = "$(OBJCOPY) -O binary $(location :hyper-elf) $@",
+    cmd = select({
+        "@platforms//cpu:riscv64": "riscv64-linux-gnu-objcopy -O binary $< $@",
+        "//conditions:default": "$(OBJCOPY) -O binary $(location :hyper-elf) $@",
+    }),
     toolchains = ["@bazel_tools//tools/cpp:current_cc_toolchain"],
 )
 
@@ -280,7 +310,7 @@ platform(
 platform(
     name = "linux_riscv64",
     constraint_values = [
-        "@platforms//os:linux",
+        "@platforms//os:none",
         "@platforms//cpu:riscv64",
     ],
 )

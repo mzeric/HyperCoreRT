@@ -251,11 +251,11 @@ int pg_map_stage2(vaddr_t vaddr, paddr_t paddr, uint64_t map_size, int attr, int
 
 int stage2_map(struct stage2_mm_info *info, vaddr_t vaddr, paddr_t paddr, uint64_t map_size, int attr, int acc) {
 
-    return pg_map(info->root_table, 0, vaddr, paddr, attr, map_size, 0);
+    return pg_map((ptw_t *)info->root_table, 0, vaddr, paddr, attr, map_size, 0);
 }
 
 int stage2_unmap(struct stage2_mm_info *info, vaddr_t vaddr, uint64_t map_size) {
-    return pg_unmap(info->root_table, 0, vaddr, map_size);
+    return pg_unmap((ptw_t *)info->root_table, 0, vaddr, map_size);
 }
 
 paddr_t ptw_walk(ptw_t *cur_tbl, vaddr_t addr, int level) {
@@ -274,7 +274,7 @@ paddr_t ptw_walk(ptw_t *cur_tbl, vaddr_t addr, int level) {
 
     if (next_pte.walk.valid == 0) {
         safe_printf("invalid pte, %lx\n", pte_offset(addr, level));
-        return;
+        return 0;
     }
 
 

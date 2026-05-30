@@ -27,6 +27,17 @@ SECTIONS{
     . = ALIGN(8);
   }
 
+  .init_array : {
+    PROVIDE(__init_array_start = .);
+    *(.init_array .init_array.*)
+    PROVIDE(__init_array_end = .);
+  }
+  .fini_array : {
+    PROVIDE(__fini_array_start = .);
+    *(.fini_array .fini_array.*)
+    PROVIDE(__fini_array_end = .);
+  }
+
   .bss (NOLOAD) :  {
     . = ALIGN(4);
 		PROVIDE(_bss_start = .);

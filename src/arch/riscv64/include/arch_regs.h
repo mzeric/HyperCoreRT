@@ -53,30 +53,6 @@ struct cpu_user_regs {
 	/* a0 value before the syscall */
 	unsigned long orig_a0;
 };
-struct cpu_arch {
-	/* Register width */
-	unsigned long xlen;
-	/* ISA feature bitmap */
-	unsigned long *isa;
-	/* CSR state */
-	unsigned long hie;
-	unsigned long hip;
-	unsigned long hvip;
-	unsigned long vsstatus;
-	unsigned long vstvec;
-	unsigned long vsscratch;
-	unsigned long vsepc;
-	unsigned long vscause;
-	unsigned long vstval;
-	unsigned long vsatp;
-	unsigned long scounteren;
-
-	u64 hstatus;
-	/* FP state */
-	// union riscv_priv_fp fp;
-	/* Opaque pointer to timer data */
-	void *timer_priv;
-};
 
 static inline void arch_set_pc(struct cpu_user_regs *regs, u64 pc) {
 	regs->sepc = pc;

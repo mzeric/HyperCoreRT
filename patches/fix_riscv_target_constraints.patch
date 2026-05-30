@@ -1,0 +1,11 @@
+--- a/toolchain/toolchain.bzl
++++ b/toolchain/toolchain.bzl
+@@ -26,7 +26,7 @@ target_constraints = {
+     "riscv-none-elf": {
+         "riscv32": ["@platforms//os:none", "@platforms//cpu:riscv32"],
+-        "riscv64": ["@platforms//os:none", "@platforms//cpu:riscv32"],
++        "riscv64": ["@platforms//os:none", "@platforms//cpu:riscv64"],
+     },
+ }
+
+ hosts = {

@@ -13,7 +13,10 @@ cc_library(
         "-fno-exceptions",
         "-fno-rtti",
         "-fno-threadsafe-statics",
-    ],
+    ] + select({
+        "@platforms//cpu:riscv64": ["-march=rv64imac_zicsr", "-mabi=lp64"],
+        "//conditions:default": [],
+    }),
     deps = [
         "//:common_headers",
     ],
@@ -33,7 +36,10 @@ cc_library(
         "-fno-exceptions",
         "-fno-rtti",
         "-fno-threadsafe-statics",
-    ],
+    ] + select({
+        "@platforms//cpu:riscv64": ["-march=rv64imac_zicsr", "-mabi=lp64"],
+        "//conditions:default": [],
+    }),
     deps = [
        "//:common_headers",
        "//:aarch64_as"

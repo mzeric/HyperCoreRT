@@ -4,7 +4,7 @@
 #include "include/arch_regs.h"
 #include "timer.h"
 #include "sched.h"
-#include "arch_page.h"
+#include "mm.h"
 #include "mmu.h"
 #include "exception.h"
 
@@ -15,8 +15,8 @@ struct fault_info {
     const char *name;
 };
 
-void panic() {
-    safe_printf("Kernel panic\n");
+void panic(const char *msg) {
+    safe_printf("Kernel panic: %s\n", msg ? msg : "");
     while (1)
         ;
 }
@@ -47,7 +47,7 @@ static void do_trap_error(struct cpu_user_regs *regs, const char *str) {
                 regs->sbadaddr,
                 regs->scause);
 
-    panic();
+    panic("trap error");
 }
 
 #define DO_ERROR_INFO(name)                                                                        \
@@ -73,8 +73,9 @@ int inject_illegal_inst(struct cpu_user_regs *regs, uint64_t inst);
 int is_trap_from_guest(u64 hstatus) { return (hstatus & HSTATUS_SPV); }
 
 
-void do_page_fault(struct  cpu_user_regs *regs, const char *str) {
+int do_page_fault(struct  cpu_user_regs *regs, const char *str) {
     do_trap_error(regs, str);
+    return 0;
 }
 
 int do_illegal_inst(struct cpu_user_regs *regs, int inst) {
@@ -183,14 +184,16 @@ void handle_virt_instruction(struct cpu_user_regs *regs) {
 
     switch ((stval & INSN_OPCODE_MASK) >> INSN_OPCODE_SHIFT) {
     case INSN_OPCODE_SYSTEM:
-        return system_opcode_insn(regs, stval);
+        system_opcode_insn(regs, stval);
+        return;
     default:
-        return do_illegal_inst(regs, stval);
+        do_illegal_inst(regs, stval);
+        return;
     };
     do_trap_error(regs, "");
 }
 
-void do_guest_page_fault(struct cpu_user_regs *regs, const char *str) {
+int do_guest_page_fault(struct cpu_user_regs *regs, const char *str) {
     int cause = regs->scause & 0x1F;
     switch(cause) {
         case RISCV_EXCP_VIRT_INSTRUCTION_FAULT:
@@ -198,7 +201,7 @@ void do_guest_page_fault(struct cpu_user_regs *regs, const char *str) {
         break;
     }
 
-    return;
+    return 0;
 }
 
 static const struct fault_info fault_info[] = {
@@ -264,7 +267,7 @@ void do_stage2_fault(struct cpu_user_regs *regs, int cause) {
 
 }
 
-void do_exception(struct cpu_user_regs *args, u64 cause) {
+extern "C" void do_exception(struct cpu_user_regs *args, u64 cause) {
     const struct fault_info *inf;
 
     if (cause & (1ul << 63)) {

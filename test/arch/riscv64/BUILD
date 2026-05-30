@@ -13,6 +13,8 @@ cc_library(
         "-D__ASSEMBLY__",
         "-Wall",
         "-mcmodel=medany",
+        "-march=rv64imac_zicsr",
+        "-mabi=lp64",
     ],
     deps = [
 
@@ -34,7 +36,9 @@ cc_library(
         "-ffreestanding",
         "-fno-stack-protector",
         "-fno-builtin",
-        "-mcmodel=medany"
+        "-mcmodel=medany",
+        "-march=rv64imac_zicsr",
+        "-mabi=lp64",
     ],
     includes = [
         "include/",
@@ -55,9 +59,12 @@ cc_binary(
         "-nostdlib",
         "-nostartfiles",
         "-nodefaultlibs",
+        "-march=rv64imac_zicsr",
+        "-mabi=lp64",
     ] + [
         "-Wl,-T$(location :linker.lds)",
         "-Wl,--build-id=none",
+        "-Wl,-m,elf64lriscv",
     ],
     deps = [
         ":guest-core",
@@ -69,6 +76,5 @@ genrule(
     name = "guest-bin",
     srcs = [":guest-elf"],
     outs = ["guest.bin"],
-    cmd = "$(OBJCOPY) -O binary $(location :guest-elf) $@",
-    toolchains = ["@bazel_tools//tools/cpp:current_cc_toolchain"],
+    cmd = "riscv64-linux-gnu-objcopy -O binary $< $@",
 )

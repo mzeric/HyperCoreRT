@@ -1,80 +1,92 @@
 #include "vcpu.h"
 #include "kmalloc.h"
 #include <string.h>
+#include "inline_asm.h"
+#include "mmu.h"
+#include "exception.h"
 
 #define VCPU_STACK_SIZE (4096)
 
-int arch_vcpu_reset(vcpu_t *vcpu) {
-    int rc = 0;
-    // vcpu->carch.hvip
-    return rc;
+static void arch_vcpu_reset(vcpu_t *vcpu) {
+    /* nothing yet */
 }
 
-vcpu_t *create_vcpu(int vcpu_d, int priority) {
-    vcpu_t *vcpu = NULL;
-
-    if (!(vcpu = (vcpu_t *)kmalloc(sizeof(vcpu_t)))) {
-        hyper_fatal("alloc vcpu struct failed");
+vcpu_t *create_vcpu(int vcpu_id, int priority) {
+    vcpu_t *vcpu = (vcpu_t *)kmalloc(sizeof(vcpu_t));
+    if (!vcpu) {
         return NULL;
     }
 
     memset(vcpu, 0, sizeof(vcpu_t));
-
     INIT_LIST_HEAD(&vcpu->list);
-
     vcpu->priority = priority;
 
-    /* read-write lock here */
-
-    /* need tasklet here */
-
-    vcpu->arch.stack = (char *)kmalloc(VCPU_STACK_SIZE) + VCPU_STACK_SIZE;
-    // vcpu->arch.saved_context.sp =
+    vcpu->arch.stack = (uint64_t)((char *)kmalloc(VCPU_STACK_SIZE) + VCPU_STACK_SIZE);
     arch_vcpu_reset(vcpu);
 
     return vcpu;
 }
-#include "emulate.h"
-void vcpu_context_restore(vcpu_t *vcpu) {
-    // msr(sp_el1, vcpu->arch.stack);
-    // msr(spsr_el1, 0);
-    // msr(cpacr_el1, vcpu->arch.cpacr);
 
-
-    // msr(sctlr_el1, vcpu->arch.sctlr_el1);
-    u64 vs = 0;
-
-    csrw(CSR_HSTATUS, vcpu->carch.hstatus);
-
-    csrw(CSR_HIE, (1 << 2 | 1 << 6 | 1 << 10 | 1 << 12));
-
-    // inject_illegal_inst(&vcpu->regs, 0x1023);
-    // safe_printf("inject pc:%lx\n", vcpu->regs.sepc);
-
-    // vs |= (1u<<8);
-    // csrw(CSR_VSSTATUS, vs);
-
-    // csrw(CSR_HIDELEG, (1u << 1) | (1u << 5) | (1u << 9));
-    csrw(CSR_HIDELEG, (1u << 2) | (1u << 6) | (1u << 10));
-
-    // csrw(CSR_HVIP, (1 << 6));
-    // csrw(CSR_HIP, (1u<<2));
-    safe_printf("debug: hedeleg %lx\n", csrr(CSR_HIDELEG));
-}
-
-void vcpu_context_save(vcpu_t *vcpu) {
-    vcpu->arch.stack = 0;
-    vcpu->carch.hstatus = csrr(CSR_HSTATUS);
+void destroy_vcpu(vcpu_t *vcpu) {
+    if (vcpu->arch.stack)
+        kfree((void *)(vcpu->arch.stack - VCPU_STACK_SIZE));
+    kfree(vcpu);
 }
 
 #define HSTATUS_VS (HSTATUS_SPV | HSTATUS_SPVP)
-#define HSTATUS_VU (HSTATUS_SPV)
-#define HSTATUS_HS (HSTATUS_SPVP)
 
 int arch_vcpu_init(vcpu_t *vcpu, uintptr_t entry, uintptr_t stack) {
     vcpu->arch.stack = stack;
+
+    /* Set up guest entry in the trap frame */
     vcpu->regs.sepc = entry;
     vcpu->regs.ra = entry;
+    vcpu->regs.sp = stack;
 
-    vcpu->carch.hstatus = HSTATUS_VS;//switch to vs
+    /* Set HSTATUS to enter VS-mode on sret */
+    vcpu->carch.hstatus = HSTATUS_VS;
+
+    /* Set VSSTATUS: SPP=0 (return to U-mode within guest), SPIE=1 */
+    vcpu->carch.vsstatus = SSTATUS_SPIE;
+
+    return 0;
+}
+
+void vcpu_context_save(vcpu_t *vcpu) {
+    /* Save H-extension CSRs */
+    vcpu->carch.hstatus   = csrr(CSR_HSTATUS);
+    vcpu->carch.vsstatus  = csrr(CSR_VSSTATUS);
+    vcpu->carch.vsepc     = csrr(CSR_VSEPC);
+    vcpu->carch.vstvec    = csrr(CSR_VSTVEC);
+    vcpu->carch.vsscratch = csrr(CSR_VSSCRATCH);
+    vcpu->carch.vscause   = csrr(CSR_VSCAUSE);
+    vcpu->carch.vstval    = csrr(CSR_VSTVAL);
+    vcpu->carch.vsatp     = csrr(CSR_VSATP);
+    vcpu->carch.hie       = csrr(CSR_HIE);
+
+    /* Save hypervisor interrupt pending */
+    vcpu->carch.hvip      = csrr(CSR_HVIP);
+}
+
+void vcpu_context_restore(vcpu_t *vcpu) {
+    /* Restore VS-mode CSRs */
+    csrw(CSR_VSSTATUS,  vcpu->carch.vsstatus);
+    csrw(CSR_VSEPC,     vcpu->carch.vsepc);
+    csrw(CSR_VSTVEC,    vcpu->carch.vstvec);
+    csrw(CSR_VSSCRATCH, vcpu->carch.vsscratch);
+    csrw(CSR_VSCAUSE,   vcpu->carch.vscause);
+    csrw(CSR_VSTVAL,    vcpu->carch.vstval);
+    csrw(CSR_VSATP,     vcpu->carch.vsatp);
+
+    /* Restore hypervisor interrupt configuration */
+    csrw(CSR_HIE,  vcpu->carch.hie);
+    csrw(CSR_HVIP, vcpu->carch.hvip);
+
+    /* Delegate interrupts to VS-mode: VS-mode timer, external, software */
+    csrw(CSR_HIDELEG, (1UL << IRQ_VS_SOFT) |
+                      (1UL << IRQ_VS_TIMER) |
+                      (1UL << IRQ_VS_EXT));
+
+    /* Set HSTATUS.SPV=1 so sret enters VS-mode */
+    csrw(CSR_HSTATUS, vcpu->carch.hstatus);
 }
