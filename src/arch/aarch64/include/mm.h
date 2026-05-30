@@ -26,9 +26,16 @@ extern void *_hyper_start, *_hyper_end;
 void init_mm(void);
 
 /* Saved MMU config for secondary CPU bring-up. */
-extern uint64_t g_saved_tcr_el2;
-extern void    *g_saved_ttbr0_el2;
-void secondary_enable_mmu(void);
+struct mmu_boot_state {
+    uint64_t tcr_el2;
+    uint64_t vtcr_el2;
+    uint64_t vttbr_el2;
+};
+
+extern struct mmu_boot_state g_mmu_boot;
+
+/* Stage-1 boot page table (defined in mm.c). */
+extern lpae_t boot_pgtable[];
 
 int          get_phys_bits();
 void         print_addr_idx(vaddr_t addr);

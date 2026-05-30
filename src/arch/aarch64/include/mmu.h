@@ -196,5 +196,5 @@ lpae_t make_stage1_entry(paddr_t pa, unsigned int attr_index);
 /* Guest stage-2 entry for a given physical address. */
 lpae_t make_stage2_entry(paddr_t pa, enum mem_type type, enum mem_access access);
 
-/* Secondary CPU MMU bring-up (reuses primary's page tables). */
-void secondary_enable_mmu(void);
+/* Unified MMU enable (MAIR + TLB + SCTLR). Caller sets TCR/TTBR0 first. */
+void mmu_enable(void);

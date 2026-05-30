@@ -150,6 +150,20 @@ void init_gicv3(void *gicd_base, void *gicc_base, void *gicr_base) {
     gicv3_cpu_init(gicc_base);
 }
 
+/* Per-CPU GIC init (redistributor + CPU interface).
+ * Must be called after MMU is enabled. Uses virtual addresses from
+ * hyper_config()->host_gic.gicr_virt. */
+void gicv3_pcpu_init(int cpu_id)
+{
+    enable_sre_el2();
+
+    uintptr_t gicr_base = hyper_config()->host_gic.gicr_virt +
+                          (uintptr_t)cpu_id * hyper_config()->host_gic.gicr_stride;
+    wakeup_gic(gicr_base);
+    gicv3_rd_init((void *)gicr_base);
+    gicv3_cpu_init(NULL);
+}
+
 /*
 https://github.com/seL4/seL4/blob/master/src/arch/arm/machine/gic_v3.c
 https://gitlab.arm.com/arm-reference-solutions/arm-reference-solutions-docs/-/blob/master/docs/aemfvp-a/user-guide.rst

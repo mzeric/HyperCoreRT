@@ -17,6 +17,7 @@ struct hyper_gic_config {
     u64 gicr_size;
     u64 gicr_stride;
     u32 gicr_count;
+    uintptr_t gicr_virt;   /* ioremap'd virtual base (set after MMU init) */
 };
 
 struct hyper_timer_config {

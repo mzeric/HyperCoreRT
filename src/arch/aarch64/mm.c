@@ -216,10 +216,7 @@ void create_uart_guest_map() {
 struct stage2_mm_info s2_mm_info;
 
 /* Saved for secondary CPU MMU bring-up (set by primary during init). */
-uint64_t g_saved_tcr_el2;
-void     *g_saved_ttbr0_el2;
-uint64_t g_saved_vttbr_el2;   /* stage-2 root table (physical) */
-uint64_t g_saved_vtcr_el2;    /* VTCR_EL2 configuration */
+struct mmu_boot_state g_mmu_boot;
 
 struct stage2_mm_info *get_default_mm_info() {
     return &s2_mm_info;
@@ -268,8 +265,8 @@ void enable_stage2_traslation(lpae_t *table_root) {
     msr_sync(VTTBR_EL2, vttbr_val);
 
     /* Save for secondary CPUs */
-    g_saved_vttbr_el2 = vttbr_val;
-    g_saved_vtcr_el2 = mrs(vtcr_el2);
+    g_mmu_boot.vttbr_el2 = vttbr_val;
+    g_mmu_boot.vtcr_el2  = val;
 
 }
 /*
@@ -293,72 +290,17 @@ extern void timer_init();
 
 // #define MT_NORMAL 4
 
-void enable_mmu(void *table) {
-    // hyper_info("Enable paging");
-
-    safe_printf("mair_el2:%lx\n", mrs(mair_el2));
-
-    /* Save for secondary CPUs */
-    g_saved_tcr_el2   = mrs(tcr_el2);
-    g_saved_ttbr0_el2 = table;
-
-    msr(mair_el2, 0xee0000ff440c0400);
-    // msr(mair_el2, 0x04440c0400);
-    /* flush local TLB */
-    asm volatile("ic iallu\n\t"
-                 "tlbi alle2is\n\t"
-                 "dsb sy");
-
-
-    asm volatile("dsb nshst\n\t"
-                 "tlbi alle2\n\t"
-                 "dsb nsh\n\t"
-                 "isb\n\t" ::
-                     : "memory");
-
-    msr_sync(TTBR0_EL2, table);
-    asm volatile("isb");
-
-    uint64_t val = mrs(SCTLR_EL2);
-    // hyper_debug("mmu: %x", val);
-
-    /* enable mmu and data cache */
-    val |= (SCTLR_Axx_ELx_M | SCTLR_Axx_ELx_C);
-    val &= ~(SCTLR_Axx_ELx_A);
-    asm volatile("dsb sy");
-
-    msr(SCTLR_EL2, val);
-    asm volatile("isb");
-    asm volatile("dsb sy\n\t isb");
-
-    hyper_info("enable mmu done");
-}
-
-void secondary_enable_mmu(void)
+void mmu_enable(void)
 {
-    /* MAIR — same value as primary */
     msr(mair_el2, 0xee0000ff440c0400);
 
-    hyper_info("secondary mmu: vttbr=0x%lx vtcr=0x%lx",
-             g_saved_vttbr_el2, g_saved_vtcr_el2);
-
-    /* TLB invalidation — local only (avoid flushing primary's TLBs) */
+    /* Flush local TLB */
     asm volatile("ic iallu\n\t"
                  "dsb nshst\n\t"
                  "tlbi vmalle1is\n\t"
                  "tlbi alle2\n\t"
                  "dsb nsh\n\t"
                  "isb\n\t" ::: "memory");
-
-    /* TCR + TTBR0 — reuse primary's settings */
-    msr(tcr_el2, g_saved_tcr_el2);
-    msr_sync(TTBR0_EL2, g_saved_ttbr0_el2);
-    asm volatile("isb");
-
-    /* Stage-2: reuse primary's VTCR and VTTBR */
-    msr_sync(vtcr_el2, g_saved_vtcr_el2);
-    msr_sync(VTTBR_EL2, g_saved_vttbr_el2);
-    asm volatile("isb");
 
     /* Enable MMU + caches */
     uint64_t val = mrs(SCTLR_EL2);
@@ -367,8 +309,7 @@ void secondary_enable_mmu(void)
     asm volatile("dsb sy");
 
     msr(SCTLR_EL2, val);
-    asm volatile("isb");
-    asm volatile("dsb sy\n\t isb");
+    asm volatile("isb; dsb sy; isb");
 }
 
 int ptw_test(lpae_t *tbl_root, vaddr_t vir) {
@@ -515,7 +456,9 @@ void init_mm(void) {
     fix_map(0x09000000, 0x09000000, 0, MT_DEVICE_nGnRnE);
 #endif
 
-    enable_mmu(boot_pgtable);
+    msr_sync(TTBR0_EL2, boot_pgtable);
+    asm volatile("isb");
+    mmu_enable();
 
 
     hyper_info("mmu enabled");

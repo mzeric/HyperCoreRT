@@ -4,9 +4,11 @@
 #include "hyper_config.h"
 #include "vmio.h"
 #include "log.h"
+#include "mm.h"
 #include "mmu.h"
 #include "timer.h"
 #include "excep.h"
+#include "src/drivers/gic/gicv3.h"
 
 #include <libfdt.h>
 #include <stdint.h>
@@ -119,11 +121,6 @@ static int parse_host_cpus(void *fdt)
 
 /* ---- Secondary entry (C) ---- */
 
-/* Forward declarations for per-pCPU GIC init (physical addresses, no MMU) */
-extern void enable_sre_el2(void);
-extern int  gicv3_cpu_init(void *gicc_base);
-extern void wakeup_gic(uintptr_t gicr_base);
-extern int  gicv3_rd_init(void *gicr_base);
 extern void gic_vcpu_init_pcpu(void);
 
 void secondary_start(void)
@@ -136,16 +133,19 @@ void secondary_start(void)
         while (1) { wfi(); }
     }
 
-    /* Phase 0: per-pCPU GIC init using physical addresses (no MMU) */
-    uintptr_t gicr_base = hyper_config()->host_gic.gicr_base +
-                          (uintptr_t)cpu * hyper_config()->host_gic.gicr_stride;
-    enable_sre_el2();
-    wakeup_gic(gicr_base);
-    gicv3_rd_init((void *)gicr_base);
-    gicv3_cpu_init(NULL);
+    /* Phase 1: enable MMU (load primary's config from g_mmu_boot) */
+    msr(tcr_el2, g_mmu_boot.tcr_el2);
+    msr_sync(vtcr_el2, g_mmu_boot.vtcr_el2);
+    msr_sync(VTTBR_EL2, g_mmu_boot.vttbr_el2);
+    msr_sync(TTBR0_EL2, boot_pgtable);
+    asm volatile("isb");
+    mmu_enable();
+
+    /* Phase 2: per-pCPU GIC init using virtual addresses (after MMU) */
+    gicv3_pcpu_init(cpu);
     gic_vcpu_init_pcpu();
 
-    /* Phase 0.5: configure HCR_EL2 for stage-2 + trap routing. */
+    /* Phase 3: configure HCR_EL2 for stage-2 + trap routing */
     {
         uint64_t hcr = get_default_hcr_flags();
         hcr |= (1UL << 31);           /* RW: EL1 is AArch64 */
@@ -153,10 +153,7 @@ void secondary_start(void)
         asm volatile("msr hcr_el2, %0; isb" :: "r"(hcr));
     }
 
-    /* Phase 1: enable MMU (reuse primary's page tables) */
-    secondary_enable_mmu();
-
-    /* Phase 2: enable EL2 physical timer for scheduling tick */
+    /* Phase 4: enable EL2 physical timer for scheduling tick */
     enable_timer_irq();
     hyp_timer_rearm();
 

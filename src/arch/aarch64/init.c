@@ -645,6 +645,9 @@ int cpu_init(void) {
 
     /* such as: 0x8084_3510 */
     msr(tcr_el2, tcr_val);
+
+    /* Save for secondary CPU bring-up */
+    g_mmu_boot.tcr_el2 = tcr_val;
     // hyper_info("TCR_EL2:%x", tcr_val);
 
     /* clear SCTLR.A */
@@ -900,94 +903,70 @@ int init_hyper_low_level(void *args) {
 }
 
 
-int __init_hyper_low_level(void *args) {
-
-    uint64_t el = 0;
-    uintptr_t dtb_phys = (uintptr_t)args;
+static void init_platform(uintptr_t dtb_phys)
+{
     safe_printf("init low level %x\n", readl((void *)0x80010000));
     load_dtb(dtb_phys, &g_hyper_config);
     write_sysreg(&__hyp_vectors, vbar_el2);
-
-    // zero_bss();
     safe_printf("z-bss done\n");
     cpu_init();
     safe_printf("cpu-init done\n");
+}
 
+static void init_memory(void)
+{
     init_mm();
     safe_printf("mmu-init done\n");
-
     init_percpu_area();
-
-#if 0
-    /* for memset */
-    uint32_t sctlr = get_sctlr();
-    sctlr &= ~(CR_A);
-    set_sctlr(sctlr);
-#endif
     write_sysreg(&__hyp_vectors, vbar_el2);
+    hyper_info("vttbr=0x%lx", mrs(VTTBR_EL2));
+}
 
-#if 0
-    hyper_info("tcr: %x", TCR_EL2_VALUE);
-    msr(tcr_el2, TCR_EL2_VALUE);
-#endif
-    hyper_debug("el: 0x%lx, current_el:0x%x, cpu:%lx", el, current_el(),
-            smp_id());
-
-    hyper_info("=%lx", mrs(VTTBR_EL2));
-
-
-
-    void *gicd_base = (void*)ioremap_page(g_hyper_config.host_gic.gicd_base, MT_DEVICE_nGnRnE);
-    void *gicc_base = (void*)ioremap_page(GIC_GICC_BASE, MT_NORMAL);
-    void *gicr_base = (void*)ioremap(g_hyper_config.host_gic.gicr_base, g_hyper_config.host_gic.gicr_size, MT_DEVICE_nGnRnE);
-
+static void init_interrupt(void)
+{
+    void *gicd_base = (void *)ioremap_page(g_hyper_config.host_gic.gicd_base, MT_DEVICE_nGnRnE);
+    void *gicc_base = (void *)ioremap_page(GIC_GICC_BASE, MT_NORMAL);
+    void *gicr_base = (void *)ioremap(g_hyper_config.host_gic.gicr_base,
+                                      g_hyper_config.host_gic.gicr_size, MT_DEVICE_nGnRnE);
 
     hyper_info("GICv - %x", readl(gicd_base + 4));
-
-#if 0
-    if (readl(gicd_base + 0x4) == 0x68)
-        init_gicv2(gicd_base, gicc_base);
-    else
-#endif
     init_gicv3(gicd_base, gicc_base, gicr_base);
-
-    /* Bring up the virtual CPU interface so guest IRQs we inject into
-       ICH_LR can actually be delivered to EL1. */
     gic_vcpu_init_pcpu();
+
+    /* Save virtual GICR base for secondary CPU gicv3_pcpu_init() */
+    g_hyper_config.host_gic.gicr_virt = (uintptr_t)gicr_base;
 
     iounmap_page((vaddr_t)gicd_base);
     iounmap_page((vaddr_t)gicc_base);
-    iounmap((vaddr_t)gicr_base, g_hyper_config.host_gic.gicr_size);
+    /* Note: do NOT iounmap gicr_base — secondaries need the mapping */
+}
 
-    /* Boot secondary physical CPUs via PSCI */
-    /* DTB can be larger than a page (QEMU expands it to ~24KB), map enough */
+static void init_secondary_cpus(uintptr_t dtb_phys)
+{
     void *fdt_mapped = (void *)ioremap(dtb_phys, 0x10000, MT_NORMAL);
     smp_boot_secondaries(fdt_mapped);
     iounmap((vaddr_t)fdt_mapped, 0x10000);
+}
 
+static void init_guest(void)
+{
     init_sched();
     init_emul_dev();
-
-    uint32_t v;
-    asm volatile("mov %0, sp":"=r"(v)::"memory");
-
-    safe_printf("here stack:%p\n",v);
     timer_init();
-
-    // create_task("init", hyper_init_entry, 10);
     create_task("guest", (void *)g_hyper_config.guest.entry, 10);
-    // create_task3("test", NULL, 10);
-
-    // create_task("idle", hyper_idle, 10);
-    // while(1);
-    // create_task("guard", hyper_guard, 10);
-
-
     hyper_info("HyperCoreRT boot finished");
+}
 
-    // test_vcpu();
+int __init_hyper_low_level(void *args)
+{
+    uintptr_t dtb_phys = (uintptr_t)args;
 
-    /* switch to el2 go down here, has no way out */
+    init_platform(dtb_phys);
+    init_memory();
+    init_interrupt();
+    init_secondary_cpus(dtb_phys);
+    init_guest();
+
     while (1)
         ;
     return 0;
