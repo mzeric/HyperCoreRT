@@ -6,6 +6,8 @@
 #include "excep.h"
 #include "spin_lock.h"
 #include "mmu.h"
+#include "ipi.h"
+#include "smp.h"
 #include <errno.h>
 #include <string.h>
 
@@ -208,11 +210,25 @@ int stage2_unmap(struct stage2_mm_info *info, vaddr_t vaddr, uint64_t map_size )
 
     spinlock_t *s2l = get_s2_lock();
     arch_spin_lock(s2l);
+    u64 start_vaddr = vaddr;
     for (u64 i = 0; i < map_size; i += PAGE_SIZE) {
         stage2_unmap_page(root, start_level, vaddr);
         vaddr += PAGE_SIZE;
     }
     arch_spin_unlock(s2l);
+
+    /* TLB invalidation: flush stage-2 entries for the unmapped range.
+     * For small ranges, flush IPA-by-IPA; for large ranges, flush all. */
+    if (map_size <= (u64)32 * PAGE_SIZE) {
+        for (u64 off = 0; off < map_size; off += PAGE_SIZE)
+            tlb_inv_guest_ipa(start_vaddr + off);
+    } else {
+        tlb_inv_guest_allis();
+    }
+
+    /* Notify other pCPUs to flush their TLBs. */
+    if (smp_cpu_count() > 1)
+        ipi_tlb_shootdown();
 
     return 0;
 }

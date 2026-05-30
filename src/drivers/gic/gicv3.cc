@@ -3,6 +3,8 @@ extern "C" {
 #include "io.h"
 #include "sys_reg.h"
 #include "arch_barrier.h"
+#include "inline_asm.h"
+#include "config.h"
 #include "gic_ops.h"
 #include "gicv3.h"
 #include "gicv3_atf.h"
@@ -96,16 +98,24 @@ void gicv3_eof_int(int id) {
 }
 
 int gicv3_rd_init(void *gicr_base) {
-    /* enable 5 timer intd + vcpu maintenance intd */
-    gicr_write_isenabler0((uintptr_t)gicr_base, 0x7e000000);
-    gicr_write_isenabler0((uintptr_t)gicr_base + 4, ~0x0u);
-
+    uintptr_t base = (uintptr_t)gicr_base;
 
     /* Configure SGIs/PPIs as non-secure Group-1.
      * Without this, PPIs default to Group 0 and ICC_IGRPEN1_EL1=1
      * (Group-1 only) will never deliver them. */
-    gicr_write_igroupr0((uintptr_t)gicr_base, ~0u);
-    gicr_write_igroupr0((uintptr_t)gicr_base + 4, ~0u);
+    gicr_write_igroupr0(base, ~0u);
+
+    /* Clear Group-0 modifier so all SGIs/PPIs are purely Group-1 NS. */
+    gicr_write_igrpmodr0(base, 0);
+
+    /* Set default priority 0xa0 for all 32 SGIs/PPIs (8 per register). */
+    for (unsigned int i = 0; i < 32; i += 4)
+        gicr_ipriorityr_write(base, i / 4, 0xa0a0a0a0u);
+
+    /* Enable SGIs (all 16) and required PPIs (timer, maintenance). */
+    gicr_write_isenabler0(base, ~0x0u);
+    gicr_write_isenabler0(base, 0x7e000000);
+
     return 0;
 }
 
@@ -139,8 +149,9 @@ void gicv3_dist_init(void *gicd_base) {
 }
 
 void gicv3_reenable_hyp_timer_ppi(void) {
-    uintptr_t sgi_base = GICR_SGI_BASE_FIXMAP + ((uintptr_t)cpu_id() * 0x1000UL);
-    mmio_write_32(sgi_base + 0x100, 1u << hyper_config()->timer.hyp_timer_ppi);
+    uintptr_t gicr_base = hyper_config()->host_gic.gicr_virt +
+                          (uintptr_t)cpu_id() * hyper_config()->host_gic.gicr_stride;
+    gicr_write_isenabler0(gicr_base, 1u << hyper_config()->timer.hyp_timer_ppi);
 }
 
 void init_gicv3(void *gicd_base, void *gicc_base, void *gicr_base) {
@@ -156,12 +167,23 @@ void init_gicv3(void *gicd_base, void *gicc_base, void *gicr_base) {
 /* Per-CPU GIC init (redistributor + CPU interface).
  * Must be called after MMU is enabled. Uses virtual addresses from
  * hyper_config()->host_gic.gicr_virt. */
-void gicv3_pcpu_init(int cpu_id)
+void gicv3_pcpu_init(int pcpu_id)
 {
     enable_sre_el2();
 
     uintptr_t gicr_base = hyper_config()->host_gic.gicr_virt +
-                          (uintptr_t)cpu_id * hyper_config()->host_gic.gicr_stride;
+                          (uintptr_t)pcpu_id * hyper_config()->host_gic.gicr_stride;
+
+    /* Verify redistributor affinity via GICR_TYPER. */
+    uint64_t typer = gicr_read_typer(gicr_base);
+    uint64_t rdist_aff = (typer >> 32) & 0xff00ffffffULL;
+    uint64_t my_aff = mrs(mpidr_el1) & 0xff00ffffffULL;
+    if (rdist_aff != my_aff) {
+        safe_printf("GICR%d typer aff 0x%lx != mpidr 0x%lx, skip\n",
+                    pcpu_id, rdist_aff, my_aff);
+        return;
+    }
+
     wakeup_gic(gicr_base);
     gicv3_rd_init((void *)gicr_base);
     gicv3_cpu_init(NULL);
@@ -208,12 +230,34 @@ void ipi_send_reschedule(int target_cpu)
         ipi_send_cpu(target_cpu, IPI_RESCHEDULE);
 }
 
+/* ---- Per-CPU call_func descriptor ---- */
+
+struct ipi_call_desc {
+    ipi_func_t fn;
+    void      *arg;
+};
+
+/* One slot per pCPU. Written by sender before IPI, read by receiver in IPI handler. */
+static struct ipi_call_desc g_ipi_call_desc[CONFIG_SMP_CPU_NUM];
+
 void ipi_handle(uint8_t ipi_vec)
 {
     switch (ipi_vec) {
     case IPI_RESCHEDULE:
         /* Handled by the caller - the IRQ handler will call sched_yield */
         break;
+    case IPI_TLB_SHOOTDOWN:
+        tlb_inv_guest_allis();
+        break;
+    case IPI_CALL_FUNC: {
+        int me = cpu_id();
+        ipi_func_t fn = g_ipi_call_desc[me].fn;
+        void *arg = g_ipi_call_desc[me].arg;
+        g_ipi_call_desc[me].fn = NULL;
+        if (fn)
+            fn(arg);
+        break;
+    }
     default:
         break;
     }
@@ -222,6 +266,20 @@ void ipi_handle(uint8_t ipi_vec)
 void ipi_pcpu_init(void)
 {
     /* SGIs (0-15) are always enabled in GICv3, no extra setup needed. */
+}
+
+void ipi_tlb_shootdown(void)
+{
+    ipi_broadcast_others(IPI_TLB_SHOOTDOWN);
+}
+
+void ipi_call_func(int target_cpu, ipi_func_t fn, void *arg)
+{
+    if (target_cpu < 0 || target_cpu >= CONFIG_SMP_CPU_NUM)
+        return;
+    g_ipi_call_desc[target_cpu].fn  = fn;
+    g_ipi_call_desc[target_cpu].arg = arg;
+    ipi_send_cpu(target_cpu, IPI_CALL_FUNC);
 }
 
 } /* extern "C" */

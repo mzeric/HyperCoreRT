@@ -223,11 +223,9 @@ int s2_map(vcpu_t *vcpu, const uint64_t ipa) {
     paddr_t hpa_aligned = mem->hpa + offset;
     stage2_map(&vcpu->mm_info, ipa_aligned, hpa_aligned, PAGE_SIZE, MEM_NORMAL_RW, mem->attr);
 
-    /* Invalidate stage-2 TLB for the IPA we just mapped so the guest's
-       retry will pick up the new PTE. */
-    asm volatile("tlbi IPAS2E1, %0" :: "r"(ipa_aligned));
-    asm volatile("dsb ish");
-    asm volatile("isb");
+    /* Invalidate stage-2 TLB for the IPA we just mapped (IS variant
+       broadcasts to all inner-shareable PEs for SMP correctness). */
+    tlb_inv_guest_ipa(ipa_aligned);
 
     return 0;
 }
