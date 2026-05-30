@@ -5,6 +5,7 @@
 int init_hyper_low_level(void*);
 int modern_cpp_smoke(void);
 int modern_cpp_global_ctor_smoke(void);
+int modern_cpp_raii_lock_smoke(void);
 void cxx_run_global_ctors(void);
 
 const char* magic = "HyperCoreRT";
@@ -19,6 +20,7 @@ int c_main(uintptr_t dtb_phys) {
     cxx_run_global_ctors();
     safe_printf("modern cpp smoke: %d\n", modern_cpp_smoke());
     safe_printf("modern cpp global ctor: %d\n", modern_cpp_global_ctor_smoke());
+    safe_printf("modern cpp raii lock: %d\n", modern_cpp_raii_lock_smoke());
     init_hyper_low_level((void *)dtb_phys);
     while(1);
 

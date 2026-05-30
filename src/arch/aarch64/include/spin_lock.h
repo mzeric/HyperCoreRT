@@ -5,15 +5,23 @@ typedef struct {
 	volatile size_t lock;
 } spinlock_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void arch_spin_lock(spinlock_t *lock);
 void arch_spin_unlock(spinlock_t *lock);
 
-
-int  save_irq_flags();
+void enable_local_irq(void);
+void disable_local_irq(void);
+int  save_irq_flags(void);
 void restore_irq_flags(int flags);
-void sched_preempt_enable();
-void sched_preempt_disable();
+void sched_preempt_enable(void);
+void sched_preempt_disable(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 // #define SPIN_UNLOCKED 0xBEAF
 

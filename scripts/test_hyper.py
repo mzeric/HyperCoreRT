@@ -32,6 +32,7 @@ READY_MARKER = "HyperCoreRT + Linux SMP - Ready"
 PROMPT = "~ #"
 CPP_SMOKE = "modern cpp smoke: 42"
 CPP_CTOR = "modern cpp global ctor: 1"
+CPP_RAI = "modern cpp raii lock: 99"
 
 FATAL_PATTERNS = (
     "Kernel panic",
@@ -193,6 +194,7 @@ def test_boot(args, proc, output_parts):
     """Wait for hypervisor + Linux boot to complete."""
     read_until(proc, [CPP_SMOKE], args.boot_timeout, output_parts, args.verbose)
     read_until(proc, [CPP_CTOR], args.boot_timeout, output_parts, args.verbose)
+    read_until(proc, [CPP_RAI], args.boot_timeout, output_parts, args.verbose)
     read_until(proc, [READY_MARKER], args.boot_timeout, output_parts, args.verbose)
 
     text = get_text(output_parts)

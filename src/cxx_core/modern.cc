@@ -1,3 +1,5 @@
+#include "spin_lock_guard.h"
+
 namespace modern {
 
 class Device {
@@ -39,4 +41,16 @@ extern "C" int modern_cpp_smoke(void)
 extern "C" int modern_cpp_global_ctor_smoke(void)
 {
     return modern::g_device.ok();
+}
+
+extern "C" int modern_cpp_raii_lock_smoke(void)
+{
+    static spinlock_t test_lock = { .lock = 0 };
+    int val = 0;
+    {
+        SpinLockGuard guard(test_lock);
+        val = 99;
+    }
+    /* lock should be unlocked here — test passes if we didn't deadlock */
+    return val;
 }
