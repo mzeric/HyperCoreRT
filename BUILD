@@ -52,6 +52,7 @@ cc_library(
         "@platforms//cpu:aarch64": glob(
             [
                 "src/arch/aarch64/**/*.c",
+                "src/arch/aarch64/**/*.cc",
                 "src/arch/aarch64/**/*.h",
             ],
         ),
@@ -74,6 +75,9 @@ cc_library(
         "-fno-stack-protector",
         "-Werror=implicit-function-declaration",
         # "-fno-builtin",
+        "-fno-exceptions",
+        "-fno-rtti",
+        "-fno-threadsafe-statics",
         ] + select({
             "@platforms//cpu:riscv64":["-mcmodel=medany"],
             "//conditions:default": [],

@@ -6,6 +6,10 @@
 #include "gic.h"
 #include "sys_reg.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define GICR_SGI_FRAME_OFFSET 0x10000UL
 #define GICR_SGI_BASE_FIXMAP  0xE100010000UL
 
@@ -157,3 +161,7 @@ void gicv3_eof_int(int id);
 void gicv3_reenable_hyp_timer_ppi(void);
 void wakeup_gic(uintptr_t gicr_base);
 int  gicv3_init_el3(uintptr_t gicr_base);
+
+#ifdef __cplusplus
+}
+#endif

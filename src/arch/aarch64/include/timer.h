@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     uint64_t ctlr; /* control register */
     uint64_t cval; /* compare value */
@@ -9,3 +13,7 @@ typedef struct {
 uint64_t get_cycles();
 void hyp_timer_rearm(void);
 void enable_timer_irq(void);
+
+#ifdef __cplusplus
+}
+#endif

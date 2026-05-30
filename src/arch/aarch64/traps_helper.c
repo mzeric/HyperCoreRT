@@ -159,7 +159,7 @@ uint64_t get_default_hcr_flags(void)
              HCR_TSC|HCR_TAC|HCR_SWIO|HCR_TIDCP|HCR_FB|HCR_TSW);
 }
 
-void panic(char *msg) {
+void panic(const char *msg) {
     safe_printf("panic:%s .........\n", msg);
     hyper_exit(1);
 

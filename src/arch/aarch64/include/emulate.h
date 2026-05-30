@@ -3,6 +3,10 @@
 #include "arch_regs.h"
 #include "vcpu.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 enum TRAP_REG_SIZE {
     trap_reg_int8 = 0,
     trap_reg_int16 = 1,
@@ -49,3 +53,7 @@ int vcpu_emulate_read(vcpu_t *vcpu,struct cpu_user_regs *regs, paddr_t ipa, int 
 int vcpu_emulate_write(vcpu_t *vcpu, struct cpu_user_regs *regs, paddr_t ipa, int reg_id, int size);
 int vcpu_emulate_sysreg_read(struct cpu_user_regs *regs, uint64_t iss, uint64_t *data);
 int vcpu_emulate_sysreg_write(struct cpu_user_regs *regs, uint64_t iss, uint64_t data);
+
+#ifdef __cplusplus
+}
+#endif

@@ -63,12 +63,12 @@ In AArch64 state, an ERET instruction causes an exception return, see ERET on pa
 
 
 
-void destroy_task(hyper_task_t *task) {
+extern "C" void destroy_task(hyper_task_t *task) {
     if (task->regs.sp)
         kfree((void *)task->regs.sp);
 }
 
-void do_bad_mode(struct cpu_user_regs *regs, int is_compat) {
+extern "C" void do_bad_mode(struct cpu_user_regs *regs, int is_compat) {
 
     hyper_debug("sysr: 0x%lx %d", regs->cpsr, is_compat);
     hyper_debug("el:%lx", mrs(CurrentEL));
@@ -76,7 +76,7 @@ void do_bad_mode(struct cpu_user_regs *regs, int is_compat) {
 
 }
 
-void dump_regs(struct cpu_user_regs *regs) {
+extern "C" void dump_regs(struct cpu_user_regs *regs) {
     hyper_printf("x0=%lx x1=%lx x2=%lx x3=%lx\n",
                  regs->x0, regs->x1, regs->x2, regs->x3);
     hyper_printf("x4=%lx x5=%lx x6=%lx x7=%lx\n",
@@ -130,7 +130,7 @@ void irq_delay(int v) {
     while(get_cycles() < start + v);
 }
 
-void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
+extern "C" void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
     int hirq_no;
     hirq_no = mrs(ICC_IAR1_EL1);
     if (current_task())
@@ -174,7 +174,7 @@ void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
     }
 }
 /* irq interrupt EL1 */
-void do_guest_irq(struct cpu_user_regs *regs) {
+extern "C" void do_guest_irq(struct cpu_user_regs *regs) {
     do_irq_mode(regs, 0);
     return;
 }
@@ -292,7 +292,7 @@ int do_guest_msr_mrs_trap(struct cpu_user_regs *regs, const union esr esr) {
     return ret;
 }
 
-void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
+extern "C" void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
     int ret = 0;
     if (is_compat == 1) {
         panic("Not support AArch32 Mode\n");
@@ -303,7 +303,7 @@ void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
 
     // safe_printf("GUEST excep spsr:%x, elr_el1:%lx, elr_el2:%lx\n", regs->cpsr, elr, mrs(elr_el2));
     // safe_printf("esr_el1: %x, esr_el2:%x\n", mrs(esr_el1), mrs(esr_el2));
-    const union esr esr = { .bits = mrs(esr_el2) };
+    const union esr esr = { .bits = (uint32_t)mrs(esr_el2) };
 
     if (current_task())
         current_task()->trap_count++;
@@ -342,7 +342,7 @@ void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
     sched_yield(regs);
 }
 
-void do_hyper_sync(struct cpu_user_regs *regs, int magic) {
+extern "C" void do_hyper_sync(struct cpu_user_regs *regs, int magic) {
     uint64_t esr = mrs(esr_el2);
     uint64_t far = mrs(far_el2);
     uint64_t elr = mrs(elr_el2);
@@ -358,7 +358,7 @@ void do_hyper_sync(struct cpu_user_regs *regs, int magic) {
     safe_printf("Exception details: EC:0x%x, ISS:0x%x\n", ec, esr & 0x1ffffff);
 
     safe_printf("spsr:%x, hcr_el2:%x\n", regs->cpsr, mrs(hcr_el2));
-    const union esr esru = {.bits = esr};
+    const union esr esru = {.bits = (uint32_t)esr};
 
     print_iss_detail(esru);
     while(1);
