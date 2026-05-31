@@ -37,6 +37,8 @@ static u64 g_guest_entry = RISCV_DEFAULT_GUEST_ENTRY;
 static u64 g_guest_dtb_addr = RISCV_DEFAULT_GUEST_DTB_ADDR;
 static u64 g_guest_ram_base = RISCV_DEFAULT_GUEST_RAM_BASE;
 static u64 g_guest_ram_size = RISCV_DEFAULT_GUEST_RAM_SIZE;
+static u64 g_guest_initrd_start;
+static u64 g_guest_initrd_end;
 static u32 g_guest_vcpus = 1;
 
 static u8 *g_dtb;
@@ -169,6 +171,8 @@ void riscv_guest_config_init(void *host_fdt) {
     g_guest_dtb_addr = RISCV_DEFAULT_GUEST_DTB_ADDR;
     g_guest_ram_base = RISCV_DEFAULT_GUEST_RAM_BASE;
     g_guest_ram_size = RISCV_DEFAULT_GUEST_RAM_SIZE;
+    g_guest_initrd_start = 0;
+    g_guest_initrd_end = 0;
     g_guest_vcpus = 1;
 
     if (bootargs) {
@@ -180,6 +184,14 @@ void riscv_guest_config_init(void *host_fdt) {
             g_guest_ram_base = tmp;
         if (parse_bootarg_u64(bootargs, "guest_ram_size", &tmp))
             g_guest_ram_size = tmp;
+        if (parse_bootarg_u64(bootargs, "guest_initrd_start", &tmp))
+            g_guest_initrd_start = tmp;
+        if (parse_bootarg_u64(bootargs, "guest_initrd_end", &tmp))
+            g_guest_initrd_end = tmp;
+        if (g_guest_initrd_end <= g_guest_initrd_start) {
+            g_guest_initrd_start = 0;
+            g_guest_initrd_end = 0;
+        }
         if (parse_bootarg_u64(bootargs, "guest_vcpus", &tmp)) {
             if (tmp < 1)
                 tmp = 1;
@@ -189,9 +201,10 @@ void riscv_guest_config_init(void *host_fdt) {
         }
     }
 
-    safe_printf("guest config: entry=%lx dtb=%lx ram=%lx+%lx vcpus=%u\n",
+    safe_printf("guest config: entry=%lx dtb=%lx ram=%lx+%lx initrd=%lx-%lx vcpus=%u\n",
                 g_guest_entry, g_guest_dtb_addr,
-                g_guest_ram_base, g_guest_ram_size, g_guest_vcpus);
+                g_guest_ram_base, g_guest_ram_size,
+                g_guest_initrd_start, g_guest_initrd_end, g_guest_vcpus);
 }
 
 static void emit_be32(u32 v) {
@@ -259,6 +272,12 @@ static void prop_u32(const char *name, u32 value) {
     prop_raw(name, &be, sizeof(be));
 }
 
+static void prop_u64(const char *name, u64 value) {
+    u64 be;
+    put_be64(&be, value);
+    prop_raw(name, &be, sizeof(be));
+}
+
 static void prop_u64_pair(const char *name, u64 a, u64 b) {
     u64 reg[2];
     put_be64(&reg[0], a);
@@ -300,8 +319,15 @@ void riscv_guest_dtb_init(void *host_fdt) {
     prop_u32("interrupt-parent", GUEST_PLIC_PHANDLE);
 
     begin_node("chosen");
-    prop_string("bootargs", "console=ttyS0,115200 earlycon=uart8250,mmio,0x20000000 loglevel=8");
+    if (g_guest_initrd_end > g_guest_initrd_start)
+        prop_string("bootargs", "console=ttyS0,115200 earlycon=uart8250,mmio,0x20000000 loglevel=8 rdinit=/init");
+    else
+        prop_string("bootargs", "console=ttyS0,115200 earlycon=uart8250,mmio,0x20000000 loglevel=8");
     prop_string("stdout-path", "/soc/serial@20000000:115200");
+    if (g_guest_initrd_end > g_guest_initrd_start) {
+        prop_u64("linux,initrd-start", g_guest_initrd_start);
+        prop_u64("linux,initrd-end", g_guest_initrd_end);
+    }
     end_node();
 
     begin_node("memory@90000000");
