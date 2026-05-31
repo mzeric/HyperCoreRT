@@ -7,6 +7,9 @@
 #if defined(__aarch64__)
 #include "emul_gicv3.h"
 #endif
+#if defined(__riscv)
+#include "src/arch/riscv64/plic.h"
+#endif
 #include "emul_uart.h"
 #include <string.h>
 
@@ -42,6 +45,9 @@ void init_emul_dev() {
 #if defined(__aarch64__)
     gic_register_emul();
 #endif
+#if defined(__riscv)
+    plic_register_emul();
+#endif
     uart_register_emul();
 }
 
@@ -64,4 +70,3 @@ void probe_emul_dev(struct mem_region *region) {
         }
     }
 }
-

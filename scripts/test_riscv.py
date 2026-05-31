@@ -5,7 +5,9 @@ RISC-V hypervisor QEMU test runner.
 Usage:
     python3 scripts/test_riscv.py
     python3 scripts/test_riscv.py --mode boot --runs 10
-    python3 scripts/test_riscv.py --mode stress --smp 1 --runs 5 -v
+    python3 scripts/test_riscv.py --mode linux --guest-cpus 2 -v
+    python3 scripts/test_riscv.py --mode shell -v
+    python3 scripts/test_riscv.py --mode stress --runs 10 --stress-rounds 20
 """
 
 import argparse
@@ -21,8 +23,10 @@ from datetime import datetime
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-BOOT_TIMEOUT = 30
+BOOT_TIMEOUT = 120
+COMMAND_TIMEOUT = 20
 EXIT_TIMEOUT = 5
+GUEST_DTB_SIZE = 0x10000
 
 CPP_SMOKE = "modern cpp smoke: 42"
 CPP_CTOR = "modern cpp global ctor: 1"
@@ -31,9 +35,24 @@ RISCV_BOOT = "HyperCoreRT RISC-V booting"
 GUEST_HELLO = "hello,guest"
 LINUX_BOOT = "Linux version"
 LINUX_VFS_PANIC = "Kernel panic - not syncing: VFS"
+READY_MARKER = "HyperCoreRT + Linux SMP - Ready"
+PASS_MARKER = "[stress] ALL PASS"
+FAIL_MARKER = "[stress] SOME FAILURES"
+SHELL_BEGIN = "__RISCV_SHELL_BEGIN__"
+SHELL_END = "__RISCV_SHELL_END__"
+PROMPT_MARKERS = ("~ #", "/ #", "# ")
+EXPECTED_LS_ENTRIES = ("bin", "dev", "init", "proc", "sys", "usr")
+LINUX_MODES = {"linux", "shell", "stress"}
 
 FATAL_PATTERNS = (
-    "Kernel panic:",
+    "Kernel panic",
+    "Oops -",
+    "trap error",
+    "Attempted to kill init",
+)
+NO_ROOTFS_FATAL_PATTERNS = (
+    "Oops -",
+    "trap error",
 )
 
 # ---------------------------------------------------------------------------
@@ -65,9 +84,9 @@ def parse_args():
 
     parser = argparse.ArgumentParser(
         description="RISC-V hypervisor QEMU test runner.")
-    parser.add_argument("--mode", choices=["boot", "stress", "linux"],
+    parser.add_argument("--mode", choices=["boot", "linux", "shell", "stress"],
                         default="boot",
-                        help="Test mode: boot (hello guest), stress, linux (boot Linux to VFS panic)")
+                        help="Test mode: boot, linux, shell, or stress.")
     parser.add_argument("--runs", type=int, default=1,
                         help="Number of test runs.")
     parser.add_argument("--stop-on-fail", action="store_true",
@@ -81,37 +100,47 @@ def parse_args():
     parser.add_argument("--hyper-bin", type=existing_path,
                         default=ci_dir / "bazel-bin" / "hyper-elf")
     parser.add_argument("--guest-bin", type=str, default=None,
-                        help="Path to guest binary (ELF or raw). "
+                        help="Path to bare guest binary (ELF or raw). "
                         "Default: auto-detect from bazel-bin.")
     parser.add_argument("--linux-image", type=existing_path,
                         default=project_root / "linux-5.4.291_build" / "arch" / "riscv" / "boot" / "Image",
-                        help="Linux Image path for --mode linux.")
+                        help="Linux Image path for Linux-backed modes.")
+    parser.add_argument("--rootfs", type=existing_path,
+                        default=project_root / "rootfs-riscv.img",
+                        help="RISC-V initramfs image for Linux rootfs modes.")
     parser.add_argument("--guest-load-addr", type=parse_int, default=0x90200000,
-                        help="Guest Linux load/entry GPA for --mode linux.")
+                        help="Guest Linux load/entry GPA for Linux-backed modes.")
     parser.add_argument("--guest-dtb-addr", type=parse_int, default=0x90f00000,
-                        help="Generated guest DTB GPA for --mode linux.")
+                        help="Generated guest DTB GPA for Linux-backed modes.")
     parser.add_argument("--guest-ram-base", type=parse_int, default=0x90000000,
-                        help="Guest RAM base GPA for --mode linux.")
+                        help="Guest RAM base GPA for Linux-backed modes.")
     parser.add_argument("--guest-ram-size", type=parse_int, default=0x08000000,
-                        help="Guest RAM size for --mode linux.")
+                        help="Guest RAM size for Linux-backed modes.")
     parser.add_argument("--guest-cpus", type=int, default=1,
-                        help="Guest vCPU count advertised in generated DTB for --mode linux.")
+                        help="Guest vCPU count advertised in generated DTB for Linux-backed modes.")
+    parser.add_argument("--initrd-load-addr", type=parse_int, default=0x96000000,
+                        help="Guest physical load address for rootfs initramfs.")
+    parser.add_argument("--no-rootfs", action="store_true",
+                        help="Boot Linux without initrd and expect the VFS panic marker.")
+    parser.add_argument("--stress-rounds", type=int, default=20,
+                        help="Number of shell stress loop rounds.")
     parser.add_argument("--qemu", default=qemu_default)
     parser.add_argument("--boot-timeout", type=int, default=BOOT_TIMEOUT)
+    parser.add_argument("--command-timeout", type=int, default=COMMAND_TIMEOUT)
+    parser.add_argument("--input-delay", type=float, default=0.01)
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser.parse_args()
 
 
 def resolve_guest_bin(args, ci_dir):
-    """Resolve guest binary path — use --guest-bin or auto-detect."""
-    if args.mode == "linux":
+    """Resolve guest binary path — Linux Image for Linux modes, bare guest otherwise."""
+    if args.mode in LINUX_MODES:
         return Path(args.linux_image).expanduser().resolve()
     if args.guest_bin:
         path = Path(args.guest_bin).expanduser().resolve()
         if not path.exists():
             raise FileNotFoundError(f"guest binary not found: {path}")
         return path
-    # Auto-detect: prefer ELF (can be loaded directly by QEMU generic loader)
     candidates = [
         ci_dir / "bazel-bin" / "test" / "arch" / "riscv64" / "guest-elf",
         ci_dir / "bazel-bin" / "test" / "arch" / "riscv64" / "guest.bin",
@@ -121,6 +150,26 @@ def resolve_guest_bin(args, ci_dir):
             return c
     raise FileNotFoundError(
         f"guest binary not found, tried: {[str(c) for c in candidates]}")
+
+
+def ranges_overlap(a_start, a_end, b_start, b_end):
+    return a_start < b_end and b_start < a_end
+
+
+def validate_initrd_range(args, initrd_end):
+    ram_start = args.guest_ram_base
+    ram_end = args.guest_ram_base + args.guest_ram_size
+    dtb_start = args.guest_dtb_addr
+    dtb_end = args.guest_dtb_addr + GUEST_DTB_SIZE
+
+    if args.initrd_load_addr < ram_start or initrd_end > ram_end:
+        raise ValueError(
+            f"initrd range 0x{args.initrd_load_addr:x}-0x{initrd_end:x} "
+            f"outside guest RAM 0x{ram_start:x}-0x{ram_end:x}")
+    if ranges_overlap(args.initrd_load_addr, initrd_end, dtb_start, dtb_end):
+        raise ValueError(
+            f"initrd range 0x{args.initrd_load_addr:x}-0x{initrd_end:x} "
+            f"overlaps guest DTB 0x{dtb_start:x}-0x{dtb_end:x}")
 
 
 def build_qemu_cmd(args, guest_bin):
@@ -135,23 +184,33 @@ def build_qemu_cmd(args, guest_bin):
         "-kernel", str(args.hyper_bin),
     ]
 
-    if args.mode == "linux":
-        hyper_args = " ".join([
+    if args.mode in LINUX_MODES:
+        hyper_args = [
             f"guest_entry=0x{args.guest_load_addr:x}",
             f"guest_dtb=0x{args.guest_dtb_addr:x}",
             f"guest_ram_base=0x{args.guest_ram_base:x}",
             f"guest_ram_size=0x{args.guest_ram_size:x}",
             f"guest_vcpus={args.guest_cpus}",
-        ])
-        cmd += ["-append", hyper_args]
+        ]
         cmd += ["-device", f"loader,file={guest_bin},force-raw=on,addr=0x{args.guest_load_addr:x}"]
+
+        if not args.no_rootfs:
+            rootfs = Path(args.rootfs).expanduser().resolve()
+            initrd_end = args.initrd_load_addr + rootfs.stat().st_size
+            validate_initrd_range(args, initrd_end)
+            hyper_args += [
+                f"guest_initrd_start=0x{args.initrd_load_addr:x}",
+                f"guest_initrd_end=0x{initrd_end:x}",
+            ]
+            cmd += ["-device", f"loader,file={rootfs},force-raw=on,addr=0x{args.initrd_load_addr:x}"]
+
+        cmd += ["-append", " ".join(hyper_args)]
         return cmd
 
-    # Load guest binary at 0x90080000 via QEMU generic loader
+    # Load bare guest binary at 0x90080000 via QEMU generic loader.
     if guest_bin.suffix == ".bin":
         cmd += ["-device", f"loader,file={guest_bin},addr=0x90080000"]
     else:
-        # ELF: QEMU loads at ELF-specified addresses
         cmd += ["-device", f"loader,file={guest_bin}"]
     return cmd
 
@@ -224,6 +283,14 @@ def read_until(proc, needles, timeout, output_buf, verbose=False, fatal_patterns
     raise TimeoutError(f"timed out waiting for: {needles}")
 
 
+def send_line(proc, line, delay):
+    for ch in line + "\n":
+        proc.stdin.write(ch.encode())
+        proc.stdin.flush()
+        if delay > 0:
+            time.sleep(delay)
+
+
 # ---------------------------------------------------------------------------
 # Test modes
 # ---------------------------------------------------------------------------
@@ -232,19 +299,21 @@ def get_text(output_parts):
     return "".join(output_parts)
 
 
+def wait_for_prompt(args, proc, output_parts):
+    text = get_text(output_parts)
+    if any(prompt in text for prompt in PROMPT_MARKERS):
+        return text
+    return read_until(proc, PROMPT_MARKERS, args.command_timeout, output_parts, args.verbose)
+
+
 def test_boot(args, proc, output_parts):
-    """Wait for hypervisor boot markers and guest output."""
+    """Wait for hypervisor boot markers and bare guest output."""
     read_until(proc, [CPP_SMOKE], args.boot_timeout, output_parts, args.verbose)
     read_until(proc, [CPP_CTOR], args.boot_timeout, output_parts, args.verbose)
     read_until(proc, [CPP_RAI], args.boot_timeout, output_parts, args.verbose)
-
-    # Wait for RISC-V boot + sstatus print (indicates basic HW init passed)
     read_until(proc, ["sstatus:"], args.boot_timeout, output_parts, args.verbose)
-
-    # Wait for guest to print "hello,guest"
     read_until(proc, [GUEST_HELLO], args.boot_timeout, output_parts, args.verbose)
 
-    # Give it a moment to finish remaining output
     time.sleep(1)
 
     text = get_text(output_parts)
@@ -252,26 +321,72 @@ def test_boot(args, proc, output_parts):
         raise AssertionError("RISC-V boot marker not found")
 
 
-def test_stress(args, proc, output_parts):
-    """Boot test — same as boot for now, will add more checks later."""
-    test_boot(args, proc, output_parts)
-
-
 def test_linux(args, proc, output_parts):
-    """Boot Linux until the expected no-root VFS panic."""
-    linux_fatal = ("Kernel panic:", "Oops -", "trap error")
-    read_until(proc, [CPP_SMOKE], args.boot_timeout, output_parts, args.verbose, linux_fatal)
-    read_until(proc, [CPP_CTOR], args.boot_timeout, output_parts, args.verbose, linux_fatal)
-    read_until(proc, [CPP_RAI], args.boot_timeout, output_parts, args.verbose, linux_fatal)
-    read_until(proc, ["creating guest task"], args.boot_timeout, output_parts, args.verbose, linux_fatal)
-    read_until(proc, [LINUX_BOOT], args.boot_timeout, output_parts, args.verbose, linux_fatal)
-    read_until(proc, [LINUX_VFS_PANIC], args.boot_timeout, output_parts, args.verbose, linux_fatal)
+    """Boot Linux with rootfs by default, or to VFS panic with --no-rootfs."""
+    fatal = NO_ROOTFS_FATAL_PATTERNS if args.no_rootfs else FATAL_PATTERNS
+    read_until(proc, [CPP_SMOKE], args.boot_timeout, output_parts, args.verbose, fatal)
+    read_until(proc, [CPP_CTOR], args.boot_timeout, output_parts, args.verbose, fatal)
+    read_until(proc, [CPP_RAI], args.boot_timeout, output_parts, args.verbose, fatal)
+    read_until(proc, ["creating guest task"], args.boot_timeout, output_parts, args.verbose, fatal)
+    read_until(proc, [LINUX_BOOT], args.boot_timeout, output_parts, args.verbose, fatal)
+
+    if args.no_rootfs:
+        read_until(proc, [LINUX_VFS_PANIC], args.boot_timeout, output_parts, args.verbose, fatal)
+    else:
+        read_until(proc, [READY_MARKER], args.boot_timeout, output_parts, args.verbose, fatal)
+
+
+def test_shell(args, proc, output_parts):
+    """Boot Linux rootfs and validate shell I/O over UART."""
+    test_linux(args, proc, output_parts)
+    wait_for_prompt(args, proc, output_parts)
+
+    begin_cmd = "printf '%s\\n' __RISCV_''SHELL_BEGIN__"
+    end_cmd = "printf '%s\\n' __RISCV_''SHELL_END__"
+    send_line(proc, f"{begin_cmd}; ls /; uname -a; {end_cmd}", args.input_delay)
+    output = read_until(proc, [SHELL_END], args.command_timeout, output_parts, args.verbose)
+
+    missing = [entry for entry in EXPECTED_LS_ENTRIES if entry not in output]
+    if missing:
+        raise AssertionError(f"ls / missing entries: {missing}")
+
+
+def test_stress(args, proc, output_parts):
+    """Boot Linux rootfs and run a shell-driven stress loop."""
+    test_linux(args, proc, output_parts)
+    wait_for_prompt(args, proc, output_parts)
+
+    rounds = max(1, args.stress_rounds)
+    pass_cmd = "printf '%s\\n' '[stress] ALL 'PASS"
+    fail_cmd = "printf '%s\\n' '[stress] SOME 'FAILURES"
+    cmd = (
+        "printf '%s\\n' __RISCV_''STRESS_BEGIN__; "
+        "i=0; ok=1; "
+        f"while [ $i -lt {rounds} ]; do "
+        "echo \"[stress] round $i\"; "
+        "uname -a >/dev/null || ok=0; "
+        "cat /proc/cpuinfo >/dev/null || ok=0; "
+        "ls / >/dev/null || ok=0; "
+        "dmesg >/dev/null 2>&1 || true; "
+        "i=$((i+1)); "
+        "done; "
+        f"if [ $ok -eq 1 ]; then {pass_cmd}; else {fail_cmd}; fi"
+    )
+    send_line(proc, cmd, args.input_delay)
+
+    output = read_until(proc, [PASS_MARKER, FAIL_MARKER],
+                        args.command_timeout, output_parts, args.verbose)
+    if FAIL_MARKER in output:
+        raise AssertionError("In-guest stress test reported failures")
+    if PASS_MARKER not in output:
+        raise AssertionError("Stress test result marker not found")
 
 
 TEST_FUNCS = {
     "boot": test_boot,
-    "stress": test_stress,
     "linux": test_linux,
+    "shell": test_shell,
+    "stress": test_stress,
 }
 
 
@@ -342,6 +457,10 @@ def main():
 
     guest_bin = resolve_guest_bin(args, ci_dir)
     print(f"Guest: {guest_bin}")
+    if args.mode in LINUX_MODES and not args.no_rootfs:
+        rootfs = Path(args.rootfs).expanduser().resolve()
+        print(f"Rootfs: {rootfs}")
+        print(f"Initrd: 0x{args.initrd_load_addr:x}-0x{args.initrd_load_addr + rootfs.stat().st_size:x}")
 
     print(f"Arch: riscv64  Mode: {args.mode}  SMP: {args.smp}  Runs: {args.runs}")
     print(f"QEMU: {args.qemu}")

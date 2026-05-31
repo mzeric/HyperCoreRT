@@ -23,3 +23,8 @@ void plic_irq_enable(u32 irq);
 void plic_irq_disable(u32 irq);
 u32  plic_claim(void);
 void plic_complete(u32 irq);
+
+void plic_register_emul(void);
+void riscv_vplic_raise(u32 irq);
+void riscv_vplic_clear(u32 irq);
+void riscv_vplic_refresh(void);

@@ -10,6 +10,7 @@
 #include "guest_memory.h"
 #include "emul_dev.h"
 #include "emulate.h"
+#include "emul_uart.h"
 #include "plic.h"
 #include "sbi_helper.h"
 #include "riscv_sbi.h"
@@ -281,7 +282,10 @@ static void handle_s_ext_irq(void) {
     if (irq == 0)
         return;
 
-    safe_printf("PLIC irq: %u\n", irq);
+    if (irq == 10)
+        uart_emul_service_host();
+    else
+        safe_printf("PLIC irq: %u\n", irq);
     plic_complete(irq);
 }
 
@@ -371,6 +375,7 @@ extern "C" void do_exception(struct cpu_user_regs *args, u64 cause) {
             handle_s_soft_irq();
             break;
         case IRQ_S_TIMER:
+            uart_emul_service_host();
             handle_timer_irq();
             sched_yield(args);
             break;

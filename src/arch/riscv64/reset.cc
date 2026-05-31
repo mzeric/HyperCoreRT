@@ -36,6 +36,7 @@ int init_hyper_low_level(void *args) {
     init_emul_dev();
     init_percpu_area();
     plic_init();
+    plic_irq_enable(10); /* QEMU virt host UART RX */
     init_sbi();
     smp_boot_secondaries();
     init_sched();

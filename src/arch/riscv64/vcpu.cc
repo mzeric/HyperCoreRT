@@ -342,15 +342,16 @@ int arch_vcpu_init(vcpu_t *vcpu, uintptr_t entry, uintptr_t stack) {
     probe_emul_dev(uart);
     guest_mem_add_region(vcpu, uart);
 
-    /* Guest PLIC: direct map for Linux irqchip probing. */
+    /* Guest PLIC: emulated so virtual UART IRQs can be injected via VSEIP. */
     struct mem_region *plic = (struct mem_region *)kmalloc(sizeof(struct mem_region));
     memset(plic, 0, sizeof(*plic));
     plic->gpa  = 0x0C000000;
-    plic->hpa  = 0x0C000000;
+    plic->hpa  = 0x0;
     plic->size = 0x400000;
-    plic->attr = MEM_ACCESS_RW | PAGE_ATTR_USER;
+    plic->attr = MEM_ACCESS_NONE;
     plic->dev  = NULL;
-    plic->match_name[0] = '\0';
+    strncpy(plic->match_name, "riscv-plic", sizeof(plic->match_name) - 1);
+    probe_emul_dev(plic);
     guest_mem_add_region(vcpu, plic);
 
     return 0;

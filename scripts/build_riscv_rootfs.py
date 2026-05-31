@@ -70,27 +70,142 @@ def safe_extract_tar(tar_path, dest):
     return roots[0]
 
 
+def build_init_binary(rootfs, build_dir, cross_compile):
+    source = build_dir / "riscv_init.c"
+    source.write_text(f'''typedef long ssize_t;
+
+#define AT_FDCWD       -100
+#define O_RDWR         02
+#define O_WRONLY       01
+#define O_NONBLOCK     04000
+#define F_SETFL        4
+#define S_IFCHR        0020000
+
+#define SYS_dup3       24
+#define SYS_fcntl      25
+#define SYS_mknodat    33
+#define SYS_mount      40
+#define SYS_openat     56
+#define SYS_close      57
+#define SYS_write      64
+#define SYS_exit       93
+#define SYS_execve     221
+
+void *memcpy(void *dst, const void *src, unsigned long n) {{
+    char *d = (char *)dst;
+    const char *s = (const char *)src;
+    while (n--)
+        *d++ = *s++;
+    return dst;
+}}
+
+static long syscall6(long n, long a0, long a1, long a2, long a3, long a4, long a5) {{
+    register long x10 __asm__("a0") = a0;
+    register long x11 __asm__("a1") = a1;
+    register long x12 __asm__("a2") = a2;
+    register long x13 __asm__("a3") = a3;
+    register long x14 __asm__("a4") = a4;
+    register long x15 __asm__("a5") = a5;
+    register long x17 __asm__("a7") = n;
+    __asm__ volatile("ecall" : "+r"(x10) : "r"(x11), "r"(x12), "r"(x13), "r"(x14), "r"(x15), "r"(x17) : "memory");
+    return x10;
+}}
+
+static long sys_openat(long dirfd, const char *path, long flags, long mode) {{
+    return syscall6(SYS_openat, dirfd, (long)path, flags, mode, 0, 0);
+}}
+
+static long sys_write(long fd, const char *buf, long len) {{
+    return syscall6(SYS_write, fd, (long)buf, len, 0, 0, 0);
+}}
+
+static void write_file_msg(const char *path, const char *buf, long len) {{
+    long fd = sys_openat(AT_FDCWD, path, O_WRONLY | O_NONBLOCK, 0);
+    if (fd < 0)
+        return;
+    sys_write(fd, buf, len);
+    syscall6(SYS_close, fd, 0, 0, 0, 0, 0);
+}}
+
+static void kmsg(const char *buf, long len) {{
+    write_file_msg("/dev/kmsg", buf, len);
+}}
+
+static void sys_mount(const char *src, const char *target, const char *type) {{
+    syscall6(SYS_mount, (long)src, (long)target, (long)type, 0, 0, 0);
+}}
+
+static void sys_mknodat(const char *path, long mode, long dev) {{
+    syscall6(SYS_mknodat, AT_FDCWD, (long)path, mode, dev, 0, 0);
+}}
+
+static void attach_console(void) {{
+    sys_mknodat("/dev/console", S_IFCHR | 0600, 0x501);
+    sys_mknodat("/dev/ttyS0", S_IFCHR | 0600, 0x440);
+    long fd = sys_openat(AT_FDCWD, "/dev/console", O_RDWR | O_NONBLOCK, 0);
+    if (fd < 0)
+        fd = sys_openat(AT_FDCWD, "/dev/ttyS0", O_RDWR | O_NONBLOCK, 0);
+    if (fd < 0)
+        return;
+    syscall6(SYS_fcntl, fd, F_SETFL, 0, 0, 0, 0);
+    syscall6(SYS_dup3, fd, 0, 0, 0, 0, 0);
+    syscall6(SYS_dup3, fd, 1, 0, 0, 0, 0);
+    syscall6(SYS_dup3, fd, 2, 0, 0, 0, 0);
+    if (fd > 2)
+        syscall6(SYS_close, fd, 0, 0, 0, 0, 0);
+}}
+
+void _start(void) {{
+    attach_console();
+    kmsg("RISCV init entered\\n", 19);
+    sys_write(1, "RISCV init entered\\n", 19);
+    sys_mount("proc", "/proc", "proc");
+    sys_mount("sysfs", "/sys", "sysfs");
+    kmsg("{READY_MARKER}\\n", {len(READY_MARKER) + 1});
+    sys_write(1, "\\n========================================\\n", 42);
+    sys_write(1, "  {READY_MARKER}\\n", {len(READY_MARKER) + 3});
+    sys_write(1, "========================================\\n\\n", 42);
+
+    char *argv[] = {{ (char *)"/bin/sh", (char *)"-i", (char *)0 }};
+    char *envp[] = {{
+        (char *)"HOME=/root",
+        (char *)"PATH=/bin:/sbin:/usr/bin:/usr/sbin",
+        (char *)"TERM=vt100",
+        (char *)0,
+    }};
+    syscall6(SYS_execve, (long)argv[0], (long)argv, (long)envp, 0, 0, 0);
+    sys_write(2, "exec /bin/sh failed\\n", 20);
+    syscall6(SYS_exit, 1, 0, 0, 0, 0, 0);
+    for (;;) {{ }}
+}}
+''')
+    run([f"{cross_compile}gcc", "-nostdlib", "-static", "-Os", "-fno-builtin",
+         "-fno-stack-protector", "-ffreestanding", "-fno-pic", "-fno-pie", "-no-pie",
+         "-msmall-data-limit=0", "-Wl,-e,_start", "-o", str(rootfs / "init"), str(source)])
+    (rootfs / "init").chmod(0o755)
+
+
 def prepare_rootfs(rootfs):
     for rel in ("dev", "etc/init.d", "proc", "root", "sys", "tmp"):
         (rootfs / rel).mkdir(parents=True, exist_ok=True)
 
     write_file(rootfs / "init", f"""#!/bin/sh
 
+exec >/dev/console 2>&1
+printf 'RISCV init entered\n'
+
 mount -t proc proc /proc 2>/dev/null
 mount -t sysfs sysfs /sys 2>/dev/null
-mount -t devtmpfs devtmpfs /dev 2>/dev/null
-
-exec </dev/console >/dev/console 2>&1
 
 printf '\n========================================\n'
 printf '  {READY_MARKER}\n'
 printf '========================================\n\n'
 
 if [ -x /usr/bin/setsid ] && [ -x /bin/cttyhack ]; then
-    exec /usr/bin/setsid /bin/cttyhack /bin/sh -i
+    exec /usr/bin/setsid /bin/cttyhack /bin/sh -i </dev/console >/dev/console 2>&1
 fi
 
-exec /bin/sh -i
+exec /bin/sh -i </dev/console >/dev/console 2>&1
 """, 0o755)
 
     write_file(rootfs / "etc" / "fstab", """proc /proc proc defaults 0 0
@@ -127,7 +242,9 @@ def write_cpio_spec(rootfs, spec):
         "nod /dev/console 0600 0 0 c 5 1",
         "nod /dev/null 0666 0 0 c 1 3",
         "nod /dev/zero 0666 0 0 c 1 5",
+        "nod /dev/kmsg 0600 0 0 c 1 11",
         "nod /dev/tty 0666 0 0 c 5 0",
+        "nod /dev/ttyS0 0600 0 0 c 4 64",
     ])
     spec.write_text("\n".join(entries) + "\n")
 
@@ -203,6 +320,7 @@ def main():
          f"CONFIG_PREFIX={rootfs_dir}", "install"])
 
     prepare_rootfs(rootfs_dir)
+    build_init_binary(rootfs_dir, build_dir, args.cross_compile)
     write_cpio_spec(rootfs_dir, spec)
 
     output.parent.mkdir(parents=True, exist_ok=True)
