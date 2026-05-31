@@ -126,6 +126,9 @@ static void __vcpu_switch(hyper_task_t *cur, hyper_task_t *next,
     /* Copy vCPU register frame into interrupt frame for kernel_exit */
     arch_regs_restore(irq_regs, next->vcpu);
 
+    /* Update current task tracking */
+    set_current(next);
+
     /* Rearm timer for next preemption tick */
     hyp_timer_rearm();
 }

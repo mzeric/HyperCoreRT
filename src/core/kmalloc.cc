@@ -13,7 +13,7 @@ static spinlock_t g_kmalloc_lock = { .lock = SPIN_UNLOCKED };
 #define KMALLOC_HEAP_SIZE (0x1000000) /* 16MB */
 
 void *alloc_mem_pool(uint64_t size) {
-    size = (size + PAGE_SIZE - 1) & (PAGE_SIZE - 1);
+    size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     int fpn = alloc_pages_cnt(size >> PAGE_SHIFT);
     if (fpn < 0) {
         hyper_err("alloc page failed:0x%lx", size);
@@ -56,13 +56,16 @@ void kfree(void *ptr) {
 
 int init_kmalloc() {
     uint64_t size = KMALLOC_HEAP_SIZE;
+    safe_printf("kmalloc: alloc_mem_pool(%lx)\n", size);
     g_kmalloc_heap = alloc_mem_pool(size);
+    safe_printf("kmalloc: heap=%p\n", g_kmalloc_heap);
     if (!g_kmalloc_heap) {
         hyper_fatal("no enough mem for kmalloc's init: 0x%lx", size);
         return -1;
     }
 
     g_kmalloc_handler = tlsf_create_with_pool(g_kmalloc_heap, size);
+    safe_printf("kmalloc: handler=%p\n", g_kmalloc_handler);
     if (g_kmalloc_handler == NULL) {
         hyper_fatal("kmalloc's allocator failed");
         return -1;

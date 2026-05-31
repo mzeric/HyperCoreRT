@@ -1,6 +1,7 @@
 #include "timer.h"
 #include "sbi_helper.h"
 #include "inline_asm.h"
+#include "safe_printf.h"
 
 #define QEMU_RISCV_VIRT_FREQ (10000000)
 #define TIMER_TICK_HZ        (100) /* 10ms tick */

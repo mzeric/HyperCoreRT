@@ -10,12 +10,8 @@ void log_putchar(char ch) {
     arch_putchar(ch);
 }
 
-void setup_traps();
-
 void _reset(void) {
     safe_printf("hello,guest\n");
-    setup_traps();
-
 
     while (1)
         ;

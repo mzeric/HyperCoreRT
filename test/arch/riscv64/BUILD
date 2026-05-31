@@ -4,9 +4,8 @@ package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "assembly",
-    srcs = glob([
-        "**/*.S",
-        "**/*.h",
+    srcs = ["guest_head.S"] + glob([
+        "include/**/*.h",
     ]),
     hdrs = glob(["include/**/*.h"]),
     copts = [
@@ -16,20 +15,13 @@ cc_library(
         "-march=rv64imac_zicsr",
         "-mabi=lp64",
     ],
-    deps = [
-
-    ],
     includes = ["include/"],
     alwayslink = True,
 )
 
 cc_library(
     name = "guest-core",
-    srcs = glob(
-        ["**/*.c",
-        "**/*.h"],
-
-    ) ,
+    srcs = ["guest_main.c"],
     hdrs = glob(["include/**/*.h"]) ,
     copts = [
         "-Wall",
@@ -49,7 +41,6 @@ cc_library(
         "//:utils",
     ],
     alwayslink = True,
-
 )
 
 cc_binary(

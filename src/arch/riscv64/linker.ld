@@ -3,7 +3,7 @@ ENTRY(_start);
 
 SECTIONS{
 
-  . = 0x80080000;
+  . = 0x80200000;
   .text :{
     _text_start_ = .;
     *(.text.vector)

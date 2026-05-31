@@ -57,8 +57,8 @@ void write_pte(ptw_t *ventry, paddr_t addr, int attr) {
     if (attr & PAGE_ATTR_USER)
         pte.walk.user = 1;
 
-    // pte.walk.access = 1;
-    // pte.walk.user = 1;
+    pte.walk.access = 1;
+    pte.walk.dirty = 1;
 
     *(ptw_t *)ventry = pte;
 }
@@ -298,6 +298,12 @@ int enable_mmu(uint64_t pg_root) {
     safe_printf("stap: %lx\n", pg_root);
     __sfence_vma_all();
     csrw(satp, pg_root);
+    __sfence_vma_all();
+
+    /* Direct UART write to verify MMU is working */
+    *(volatile char *)0x10000000 = 'O';
+    *(volatile char *)0x10000000 = 'K';
+    *(volatile char *)0x10000000 = '\n';
 
     return 0;
 }

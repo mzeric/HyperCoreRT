@@ -14,11 +14,10 @@
 .section .text.vector
 _start:
 
+    /* OpenSBI (bios default) enters here in S/HS-mode at 0x80000000 */
+
     /* init stack */
     la t0, _stack_top_
-    //lui sp, %hi(t0)
-    //addi sp, sp, %lo(_stack_top_)
-
 
 	// setup sscratch
 	la	a5, _trap_stack_top_
@@ -28,18 +27,11 @@ _start:
 	csrw CSR_VSSCRATCH, a5
 
 	// setup trap stack
-
 	csrr	tp, CSR_SSCRATCH
 	sd tp, RISCV_SCRATCH_EXCE_STACK_OFFSET(tp)
 
-
-
-    la sp, _stack_top_ # FIXME
-
+    la sp, _stack_top_
     j _reset
-//    lui t0, %hi(_reset)
-    //addi t0, t0, %lo(_reset)
-    jr t0
 
     /* should never be here */
     j .
@@ -49,7 +41,6 @@ _start:
 __riscv_vector:
 
 	/* Swap TP and SSCRATCH */
-	//j .
 	csrrw	tp, CSR_SSCRATCH, tp
 
 	sd sp, RISCV_SCRATCH_TMP0_OFFSET(tp)
@@ -74,12 +65,5 @@ ret_from_exception:
 
 restore_all:
 
-
 	kernel_exit
 	sret
-
-.global trigger_load_access_fault
-trigger_load_access_fault:
-	li a0, 0x70000000
-	ld a0, (a0)
-	ret

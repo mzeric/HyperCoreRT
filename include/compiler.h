@@ -1,3 +1,5 @@
+#pragma once
+
 /*
  * Compiler / toolchain helpers used across HyperCoreRT.
  *

@@ -7,7 +7,8 @@
 typedef uint64_t u64;
 typedef uint32_t u32;
 typedef uint8_t  u8;
-typedef __SIZE_TYPE__ size_t;
+/* Force size_t to 64-bit; will conflict if -march/-mabi produce 32-bit ABI */
+typedef uint64_t size_t;
 
 typedef uint64_t vaddr_t;
 typedef uint64_t paddr_t;
