@@ -50,3 +50,6 @@ int     enable_mmu(uint64_t pg_root);
 int     pg_map_2MB(ptw_t *root, int start_level, vaddr_t vaddr, paddr_t paddr, int attr, int without_mmu);
 
 int pg_map_stage2(vaddr_t vaddr, paddr_t paddr, uint64_t map_size, int attr, int without_mmu);
+
+/* TLB flush helpers */
+void hfence(void);

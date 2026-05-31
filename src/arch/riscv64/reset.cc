@@ -10,6 +10,8 @@
 #include "emul_dev.h"
 #include "plic.h"
 #include "sbi_helper.h"
+#include "smp.h"
+#include "percpu.h"
 
 int init_hyper_low_level(void *args) {
     safe_printf("HyperCoreRT RISC-V booting...\n");
@@ -26,8 +28,10 @@ int init_hyper_low_level(void *args) {
 
     init_mm();
     init_emul_dev();
+    init_percpu_area();
     plic_init();
     init_sbi();
+    smp_boot_secondaries();
     init_sched();
     init_timer();
 

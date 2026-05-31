@@ -1,9 +1,20 @@
 #pragma once
+#include "config.h"
 
-/* RISC-V SMP stubs — Phase 1 single-hart only */
+#define SMP_MAX_CPUS CONFIG_SMP_CPU_NUM
 
-#define SMP_MAX_CPUS 1
+/* Get current CPU ID — read from tp-based scratch structure */
+int cpu_id(void);
+int smp_cpu_count(void);
 
-static inline int cpu_id(void) { return 0; }
+/* Boot secondary harts via SBI HSM */
+void smp_boot_secondaries(void);
 
-static inline int smp_cpu_count(void) { return 1; }
+/* Secondary hart C entry point */
+#ifdef __cplusplus
+extern "C" {
+#endif
+void secondary_start(int hart_id);
+#ifdef __cplusplus
+}
+#endif

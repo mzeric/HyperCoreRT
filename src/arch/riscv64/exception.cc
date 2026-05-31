@@ -13,6 +13,8 @@
 #include "plic.h"
 #include "sbi_helper.h"
 #include "riscv_sbi.h"
+#include "ipi.h"
+#include "smp.h"
 
 #define irq_printf safe_printf
 
@@ -187,7 +189,18 @@ static void handle_s_ext_irq(void) {
 static void handle_s_soft_irq(void) {
     /* Clear the software interrupt pending bit */
     csrc(sip, (1UL << IRQ_S_SOFT));
-    /* IPI handling placeholder — Phase 4 will add full IPI dispatch */
+
+    /* Dispatch pending IPIs */
+    int cpu = cpu_id();
+    extern u32 ipi_get_pending(int);
+    extern void ipi_clear_pending(int);
+    u32 pending = ipi_get_pending(cpu);
+    ipi_clear_pending(cpu);
+
+    for (int vec = 0; vec < IPI_MAX && pending; vec++, pending >>= 1) {
+        if (pending & 1)
+            ipi_handle(vec);
+    }
 }
 
 static void handle_vs_ecall(struct cpu_user_regs *args) {

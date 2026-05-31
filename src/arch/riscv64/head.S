@@ -67,3 +67,20 @@ restore_all:
 
 	kernel_exit
 	sret
+
+/* Secondary hart entry point — jumped to from SBI HSM */
+.align 4
+.global _start_secondary
+_start_secondary:
+	/* a1 = scratch pointer; slot 0 holds logical CPU ID */
+	csrw CSR_SSCRATCH, a1
+	csrr tp, CSR_SSCRATCH
+	ld a0, RISCV_SCRATCH_SMP_ID_OFFSET(tp)
+
+	/* Give each secondary hart its own stack slice. */
+	la sp, _stack_top_
+	slli t0, a0, 14
+	sub sp, sp, t0
+
+	/* Call secondary_start(cpu_id) */
+	tail secondary_start

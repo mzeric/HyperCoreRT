@@ -1,13 +1,16 @@
 #pragma once
 #include "config.h"
+#include "smp.h"
 
-/* RISC-V per-CPU stubs — Phase 1 single-hart */
 extern char __per_cpu_start[];
+extern char __per_cpu_end[];
 extern unsigned long __per_cpu_offset[CONFIG_SMP_CPU_NUM];
 
 #define DEFINE_PER_CPU(type, name) \
-    __typeof__(type) per_cpu__##name __attribute__((section(".bss")))
+    __typeof__(type) per_cpu__##name __attribute__((section(".bss.percpu")))
 
-#define this_cpu(var) ((void *)&per_cpu__##var)
+#define this_cpu(var) \
+    ((void *)((unsigned long)&per_cpu__##var - (unsigned long)__per_cpu_start \
+              + __per_cpu_offset[cpu_id()]))
 
-static inline void init_percpu_area(void) {}
+void init_percpu_area(void);

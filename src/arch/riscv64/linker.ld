@@ -47,6 +47,14 @@ SECTIONS{
 		PROVIDE(_bss_end = .);
   }
 
+  .bss.percpu (NOLOAD) : {
+    . = ALIGN(64);
+    PROVIDE(__per_cpu_start = .);
+    *(.bss.percpu)
+    . = ALIGN(64);
+    PROVIDE(__per_cpu_end = .);
+  }
+
   /* reserse 1MB for printf/malloc */
   .dymem (NOLOAD): {
     . = ALIGN(8);
