@@ -271,9 +271,10 @@ int init_sbi(void) {
     int ver = sbi_get_spec_version();
     safe_printf("sbi version: 0x%x\n", ver);
     safe_printf("sbi fw id:%x, version:%x\n", sbi_get_firmware_id(), sbi_get_firmware_version());
-    safe_printf("time_ext: %d, pip_ext:%d, rfence_ext:%d, srst_ext:%d\n",
+    safe_printf("time_ext: %d, ipi_ext:%d, rfence_ext:%d, srst_ext:%d\n",
                 sbi_probe_extension(SBI_EXT_TIME),
                 sbi_probe_extension(SBI_EXT_IPI),
                 sbi_probe_extension(SBI_EXT_RFENCE),
                 sbi_probe_extension(SBI_EXT_SRST));
+    return 0;
 }

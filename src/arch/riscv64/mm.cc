@@ -78,13 +78,18 @@ static void init_guest_memory() {
 void init_mm() {
     init_page_allocator();
 
-    /* Host: map hypervisor code + UART + direct mapping */
+    /* Host: map hypervisor code + UART + PLIC + direct mapping */
     pg_map(page_table_root, 0,
            0x80000000, 0x80000000, 0x2000000,
            PAGE_ATTR_READ | PAGE_ATTR_EXEC | PAGE_ATTR_WRITE, 1);
 
     pg_map(page_table_root, 0,
            0x10000000, 0x10000000, 0x1000,
+           PAGE_ATTR_READ | PAGE_ATTR_WRITE, 1);
+
+    /* PLIC: 0x0C000000, 4MB (covers all contexts) */
+    pg_map(page_table_root, 0,
+           0x0C000000, 0x0C000000, 0x400000,
            PAGE_ATTR_READ | PAGE_ATTR_WRITE, 1);
 
     init_direct_mapping(page_table_root, 0,

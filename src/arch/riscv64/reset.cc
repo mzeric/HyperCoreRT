@@ -8,6 +8,8 @@
 #include "sched.h"
 #include "riscv64_system.h"
 #include "emul_dev.h"
+#include "plic.h"
+#include "sbi_helper.h"
 
 int init_hyper_low_level(void *args) {
     safe_printf("HyperCoreRT RISC-V booting...\n");
@@ -24,8 +26,13 @@ int init_hyper_low_level(void *args) {
 
     init_mm();
     init_emul_dev();
+    plic_init();
+    init_sbi();
     init_sched();
     init_timer();
+
+    /* Enable S-mode external and software interrupts */
+    csrs(sie, (1UL << IRQ_S_EXT) | (1UL << IRQ_S_SOFT));
 
     safe_printf("creating guest task at 0x90080000\n");
     create_task("guest", (void *)0x90080000, 10);

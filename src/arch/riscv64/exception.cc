@@ -10,6 +10,9 @@
 #include "guest_memory.h"
 #include "emul_dev.h"
 #include "emulate.h"
+#include "plic.h"
+#include "sbi_helper.h"
+#include "riscv_sbi.h"
 
 #define irq_printf safe_printf
 
@@ -165,15 +168,84 @@ void do_stage2_fault(struct cpu_user_regs *regs, int cause) {
     }
 }
 
+/* SBI extension IDs for passthrough */
+#define SBI_EXT_BASE        0x10
+#define SBI_EXT_TIME        0x54494D45
+#define SBI_EXT_IPI         0x735049
+#define SBI_EXT_RFENCE      0x52464E43
+#define SBI_EXT_HSM         0x48534D
+
+static void handle_s_ext_irq(void) {
+    u32 irq = plic_claim();
+    if (irq == 0)
+        return;
+
+    safe_printf("PLIC irq: %u\n", irq);
+    plic_complete(irq);
+}
+
+static void handle_s_soft_irq(void) {
+    /* Clear the software interrupt pending bit */
+    csrc(sip, (1UL << IRQ_S_SOFT));
+    /* IPI handling placeholder — Phase 4 will add full IPI dispatch */
+}
+
+static void handle_vs_ecall(struct cpu_user_regs *args) {
+    u64 ext = args->a7;
+    u64 fid = args->a6;
+
+    switch (ext) {
+    case SBI_EXT_0_1_CONSOLE_PUTCHAR:
+        safe_printf("%c", (char)args->a0);
+        args->a0 = 0;
+        break;
+    case SBI_EXT_0_1_SHUTDOWN:
+        panic("guest shutdown");
+        break;
+    case SBI_EXT_0_1_SET_TIMER:
+        sbi_set_timer(args->a0);
+        args->a0 = 0;
+        break;
+    case SBI_EXT_0_1_SEND_IPI:
+        sbi_send_ipi((const unsigned long *)args->a0);
+        args->a0 = 0;
+        break;
+    case SBI_EXT_BASE:
+    case SBI_EXT_TIME:
+    case SBI_EXT_IPI:
+    case SBI_EXT_RFENCE:
+    case SBI_EXT_HSM: {
+        /* Forward to host SBI */
+        struct sbiret ret = sbi_ecall(ext, fid, args->a0, args->a1,
+                                       args->a2, args->a3, args->a4, args->a5);
+        args->a0 = (u64)ret.error;
+        args->a1 = (u64)ret.value;
+        break;
+    }
+    default:
+        safe_printf("VS-ecall: ext=%lx fid=%lu\n", ext, fid);
+        args->a0 = (u64)-1;
+        args->a1 = 0;
+        break;
+    }
+    args->sepc += 4;
+}
+
 extern "C" void do_exception(struct cpu_user_regs *args, u64 cause) {
     const struct fault_info *inf;
 
     if (cause & (1ul << 63)) {
         cause &= ~(1UL << 63);
         switch (cause) {
+        case IRQ_S_SOFT:
+            handle_s_soft_irq();
+            break;
         case IRQ_S_TIMER:
             handle_timer_irq();
             sched_yield(args);
+            break;
+        case IRQ_S_EXT:
+            handle_s_ext_irq();
             break;
         default:
             safe_printf("unknown irq: %lu\n", cause);
@@ -182,20 +254,7 @@ extern "C" void do_exception(struct cpu_user_regs *args, u64 cause) {
     } else {
         switch (cause) {
         case RISCV_EXCP_VS_ECALL:
-            switch (args->a7) {
-            case 0: /* SBI_CONSOLE_PUTCHAR */
-                safe_printf("%c", (char)args->a0);
-                args->a0 = 0;
-                break;
-            case 8: /* SBI_SHUTDOWN */
-                panic("guest shutdown");
-                break;
-            default:
-                safe_printf("VS-ecall: a7=%lu\n", args->a7);
-                args->a0 = (u64)-1;
-                break;
-            }
-            args->sepc += 4;
+            handle_vs_ecall(args);
             break;
         case RISCV_EXCP_INST_GUEST_PAGE_FAULT:
         case RISCV_EXCP_LOAD_GUEST_ACCESS_FAULT:
