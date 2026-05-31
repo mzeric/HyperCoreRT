@@ -4,7 +4,9 @@
 #include "emul_dev.h"
 
 #include "kmalloc.h"
+#if defined(__aarch64__)
 #include "emul_gicv3.h"
+#endif
 #include "emul_uart.h"
 #include <string.h>
 
@@ -37,7 +39,9 @@ struct emul_driver pl011_driver = {
 void init_emul_dev() {
     INIT_LIST_HEAD(&g_all_drivers);
 
+#if defined(__aarch64__)
     gic_register_emul();
+#endif
     uart_register_emul();
 }
 

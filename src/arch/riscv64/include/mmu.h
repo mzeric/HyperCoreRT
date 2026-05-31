@@ -34,6 +34,10 @@ typedef union {
 #define PAGE_ATTR_USER  (1u << 4)
 #define PAGE_ATTR_DIRTY (1u << 7)
 
+#define MEM_ACCESS_NONE  0x0
+#define MEM_ACCESS_RWX   (PAGE_ATTR_EXEC | PAGE_ATTR_READ | PAGE_ATTR_WRITE)
+#define MEM_ACCESS_RW    (PAGE_ATTR_READ | PAGE_ATTR_WRITE)
+
 #define MB_2 (0x200000ul)
 
 #define is_leaf(ptw) ((ptw)->walk.read || (ptw)->walk.write || (ptw)->walk.exec)

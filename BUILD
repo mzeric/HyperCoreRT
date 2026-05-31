@@ -172,7 +172,10 @@ cc_library(
             "src/core/emul_psci.cc",
             "src/core/sched.cc",
         ],
-        "@platforms//cpu:riscv64": ["src/arch/riscv64/sched_riscv.cc"],
+        "@platforms//cpu:riscv64": [
+            "src/core/emul_dev.cc",
+            "src/arch/riscv64/sched_riscv.cc",
+        ],
     }) + ["src/main.cc"],
     hdrs = glob(["include/**/*.h"]),
     copts = [

@@ -2,7 +2,6 @@
 #include "compiler.h"
 #include "vcpu.h"
 #include "guest_memory.h"
-#include <string.h>
 
 void guest_mem_add_region(vcpu_t *vcpu, struct mem_region *mem) {
     list_add_tail(&mem->list, &vcpu->mem_region);
@@ -59,14 +58,9 @@ struct mem_region *guest_mem_find_region(vcpu_t *vcpu, uint64_t gpa, int attr) {
 
     struct list_head *head = &vcpu->mem_region;
 
-    // 遍历链表，找到合适的插入位置
     list_for_each_entry(pos, head, list) {
         if (pos->gpa <= gpa && gpa < (pos->gpa + pos->size)) {
-            // 找到了位置
-            if (strcmp(pos->match_name, "pl011") != 0)
-                hyper_debug("find %lx (%lx <-> %lx) @ %p", gpa, pos->gpa, pos->hpa, pos);
             return pos;
-
         }
     }
 

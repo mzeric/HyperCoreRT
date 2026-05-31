@@ -48,9 +48,9 @@ static int init_direct_mapping(ptw_t *root, int start_level, int attr, int witho
 /* -------------------------------------------------------------------
  * Guest memory setup — Stage-2 page tables
  *
- * Guest physical -> Host physical mappings for QEMU virt:
- *   0x90000000 (guest RAM)  -> 0x90000000 (host phys)  16MB, RWXU
- *   0x20000000 (guest UART) -> 0x10000000 (host UART)   4KB, RWU
+ * Guest RAM is identity-mapped. Device regions (UART) are left
+ * unmapped so guest access traps via stage-2 page fault for MMIO
+ * emulation.
  * ------------------------------------------------------------------- */
 
 static void init_guest_memory() {
@@ -60,11 +60,7 @@ static void init_guest_memory() {
            PAGE_ATTR_EXEC | PAGE_ATTR_READ | PAGE_ATTR_WRITE | PAGE_ATTR_USER,
            0);
 
-    /* Guest UART (0x20000000) -> Host UART (0x10000000) */
-    pg_map(page_stage2_table_root, 0,
-           0x20000000, 0x10000000, 0x1000,
-           PAGE_ATTR_READ | PAGE_ATTR_WRITE | PAGE_ATTR_USER,
-           0);
+    /* UART (0x20000000) is NOT mapped — guest traps on access for MMIO emulation */
 
     /* Install stage-2 root into HGATP */
     u64 hgatp = (reinterpret_cast<uintptr_t>(page_stage2_table_root) >> 12)

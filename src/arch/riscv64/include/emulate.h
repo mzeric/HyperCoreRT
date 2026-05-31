@@ -1,6 +1,8 @@
 #pragma once
 #include "htypes.h"
 #include "arch_regs.h"
+#include "vcpu.h"
+
 struct cpu_vcpu_trap {
 	unsigned long sepc;
 	unsigned long scause;
@@ -9,4 +11,6 @@ struct cpu_vcpu_trap {
 	unsigned long htinst;
 };
 
+int vcpu_emulate_mmio(vcpu_t *vcpu, struct cpu_user_regs *regs,
+                      uint64_t fault_addr, int is_write);
 int inject_illegal_inst(struct cpu_user_regs *regs, uint64_t inst);

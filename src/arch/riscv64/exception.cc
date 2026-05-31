@@ -7,6 +7,9 @@
 #include "mm.h"
 #include "mmu.h"
 #include "exception.h"
+#include "guest_memory.h"
+#include "emul_dev.h"
+#include "emulate.h"
 
 #define irq_printf safe_printf
 
@@ -123,6 +126,12 @@ static inline const struct fault_info *ec_to_fault_info(unsigned int scause) {
 }
 
 void hfence(void);
+
+static vcpu_t *get_current_vcpu(void) {
+    hyper_task_t *task = current_task();
+    return task ? task->vcpu : NULL;
+}
+
 void do_stage2_fault(struct cpu_user_regs *regs, int cause) {
     u64 htval = csrr(CSR_HTVAL);
     u64 stval = csrr(CSR_STVAL);
@@ -130,18 +139,30 @@ void do_stage2_fault(struct cpu_user_regs *regs, int cause) {
     u64 fault_addr = (htval << 2) | (stval & 3);
     fault_addr &= ~(PAGE_SIZE - 1);
 
-    safe_printf("stage2 fault: addr=%lx cause=%d\n", fault_addr, cause);
+    int is_write = (cause == RISCV_EXCP_STORE_GUEST_AMO_ACCESS_FAULT);
 
-    /* Guest UART: map guest 0x20000000 → host 0x10000000 */
-    if (fault_addr == 0x20000000) {
-        pg_map_stage2(0x20000000, 0x10000000, PAGE_SIZE,
-                      PAGE_ATTR_READ | PAGE_ATTR_WRITE | PAGE_ATTR_USER, 0);
-    } else {
-        /* Identity-map other faulting pages */
-        pg_map_stage2(fault_addr, fault_addr, PAGE_SIZE,
-                      PAGE_ATTR_EXEC | PAGE_ATTR_READ | PAGE_ATTR_WRITE | PAGE_ATTR_USER, 0);
+    vcpu_t *vcpu = get_current_vcpu();
+    if (!vcpu) {
+        safe_printf("stage2 fault: no vcpu, addr=%lx cause=%d\n", fault_addr, cause);
+        panic("stage2 fault without vcpu");
     }
-    hfence();
+
+    struct mem_region *region = guest_mem_find_region(vcpu, fault_addr, 0);
+    if (!region) {
+        safe_printf("stage2 fault: unmapped addr=%lx cause=%d\n", fault_addr, cause);
+        panic("stage2 fault: unknown guest address");
+    }
+
+    if (region->dev) {
+        /* MMIO device — emulate */
+        vcpu_emulate_mmio(vcpu, regs, fault_addr, is_write);
+    } else {
+        /* RAM — lazy stage-2 map */
+        u64 offset = fault_addr - region->gpa;
+        u64 hpa = region->hpa + offset;
+        pg_map_stage2(fault_addr, hpa, PAGE_SIZE, region->attr, 0);
+        hfence();
+    }
 }
 
 extern "C" void do_exception(struct cpu_user_regs *args, u64 cause) {

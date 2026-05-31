@@ -4,6 +4,8 @@
 #include "inline_asm.h"
 #include "mmu.h"
 #include "exception.h"
+#include "guest_memory.h"
+#include "emul_dev.h"
 
 #define VCPU_STACK_SIZE (4096)
 
@@ -48,6 +50,32 @@ int arch_vcpu_init(vcpu_t *vcpu, uintptr_t entry, uintptr_t stack) {
 
     /* Set VSSTATUS: SPP=0 (return to U-mode within guest), SPIE=1 */
     vcpu->carch.vsstatus = SSTATUS_SPIE;
+
+    /* Set up guest memory regions */
+    INIT_LIST_HEAD(&vcpu->mem_region);
+
+    /* Guest RAM: identity-mapped, 0x90000000, 16MB, RWX */
+    struct mem_region *ram = (struct mem_region *)kmalloc(sizeof(struct mem_region));
+    memset(ram, 0, sizeof(*ram));
+    ram->gpa  = 0x90000000;
+    ram->hpa  = 0x90000000;
+    ram->size = 0x1000000; /* 16MB */
+    ram->attr = MEM_ACCESS_RWX | PAGE_ATTR_USER;
+    ram->dev  = NULL;
+    ram->match_name[0] = '\0';
+    guest_mem_add_region(vcpu, ram);
+
+    /* Guest UART: 0x20000000, emulated NS16550A, no stage-2 map */
+    struct mem_region *uart = (struct mem_region *)kmalloc(sizeof(struct mem_region));
+    memset(uart, 0, sizeof(*uart));
+    uart->gpa  = 0x20000000;
+    uart->hpa  = 0x0;
+    uart->size = 0x1000; /* 4KB */
+    uart->attr = MEM_ACCESS_NONE;
+    uart->dev  = NULL;
+    strncpy(uart->match_name, "ns16550a", sizeof(uart->match_name) - 1);
+    probe_emul_dev(uart);
+    guest_mem_add_region(vcpu, uart);
 
     return 0;
 }

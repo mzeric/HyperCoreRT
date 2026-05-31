@@ -7,6 +7,7 @@
 #include "timer.h"
 #include "sched.h"
 #include "riscv64_system.h"
+#include "emul_dev.h"
 
 int init_hyper_low_level(void *args) {
     safe_printf("HyperCoreRT RISC-V booting...\n");
@@ -22,6 +23,7 @@ int init_hyper_low_level(void *args) {
     csrw(CSR_HCOUNTEREN, 0x7);
 
     init_mm();
+    init_emul_dev();
     init_sched();
     init_timer();
 
