@@ -12,6 +12,8 @@
 #include "sbi_helper.h"
 #include "smp.h"
 #include "percpu.h"
+#include "riscv_features.h"
+#include "guest_dtb.h"
 
 int init_hyper_low_level(void *args) {
     safe_printf("HyperCoreRT RISC-V booting...\n");
@@ -26,7 +28,10 @@ int init_hyper_low_level(void *args) {
     csrw(CSR_SCOUNTEREN, 0x7);
     csrw(CSR_HCOUNTEREN, 0x7);
 
+    riscv_features_init(args);
+
     init_mm();
+    riscv_guest_dtb_init(args);
     init_emul_dev();
     init_percpu_area();
     plic_init();

@@ -6,6 +6,8 @@
 /* Get current CPU ID — read from tp-based scratch structure */
 int cpu_id(void);
 int smp_cpu_count(void);
+int smp_hart_id(int cpu);
+void riscv_set_boot_hart_id(int hart_id);
 
 /* Boot secondary harts via SBI HSM */
 void smp_boot_secondaries(void);

@@ -15,6 +15,7 @@
 #include "riscv_sbi.h"
 #include "ipi.h"
 #include "smp.h"
+#include "riscv_features.h"
 
 #define irq_printf safe_printf
 
@@ -166,7 +167,8 @@ void do_stage2_fault(struct cpu_user_regs *regs, int cause) {
         u64 offset = fault_addr - region->gpa;
         u64 hpa = region->hpa + offset;
         pg_map_stage2(fault_addr, hpa, PAGE_SIZE, region->attr, 0);
-        hfence();
+        if (!riscv_has_svvptc())
+            hfence();
     }
 }
 

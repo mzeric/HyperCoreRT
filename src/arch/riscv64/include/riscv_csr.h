@@ -8,6 +8,10 @@
 #define CSR_CYCLE        0xc00
 #define CSR_UIE          0x4
 #define CSR_UTVEC        0x5
+#define CSR_VSTART       0x8
+#define CSR_VXSAT        0x9
+#define CSR_VXRM         0xa
+#define CSR_VCSR         0xf
 #define CSR_USCRATCH     0x40
 #define CSR_UEPC         0x41
 #define CSR_UCAUSE       0x42
@@ -15,6 +19,9 @@
 #define CSR_UIP          0x44
 #define CSR_TIME         0xc01
 #define CSR_INSTRET      0xc02
+#define CSR_VL           0xc20
+#define CSR_VTYPE        0xc21
+#define CSR_VLENB        0xc22
 #define CSR_HPMCOUNTER3  0xc03
 #define CSR_HPMCOUNTER4  0xc04
 #define CSR_HPMCOUNTER5  0xc05

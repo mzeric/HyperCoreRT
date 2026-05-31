@@ -25,6 +25,19 @@ struct cpu_arch {
     uint64_t vsatp;
     uint64_t scounteren;
 
+    uint64_t f[32];
+    uint64_t fcsr;
+
+    uint64_t vstart;
+    uint64_t vxsat;
+    uint64_t vxrm;
+    uint64_t vcsr;
+    uint64_t vl;
+    uint64_t vtype;
+    uint64_t vlenb;
+    void    *vregs;
+    uint64_t vregs_size;
+
     void *timer_priv;
 };
 

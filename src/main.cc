@@ -3,6 +3,9 @@
 #include "vmio.h"
 
 int init_hyper_low_level(void*);
+#if defined(__riscv)
+void riscv_set_boot_hart_id(int hart_id);
+#endif
 int modern_cpp_smoke(void);
 int modern_cpp_global_ctor_smoke(void);
 int modern_cpp_raii_lock_smoke(void);
@@ -41,6 +44,11 @@ int c_main(uintptr_t dtb_phys) {
 #warning "unknown arch"
 #endif
 
-extern "C" void _reset(uint64_t dtb_phys) {
-    c_main((uintptr_t)dtb_phys);
+extern "C" void _reset(uint64_t arg0, uint64_t arg1) {
+#if defined(__riscv)
+    riscv_set_boot_hart_id((int)arg0);
+    c_main((uintptr_t)arg1);
+#else
+    c_main((uintptr_t)arg0);
+#endif
 }

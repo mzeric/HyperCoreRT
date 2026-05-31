@@ -25,11 +25,16 @@ extern void ipi_clear_pending(int cpu) {
 static ipi_func_t g_tlb_shootdown_fn;
 
 void ipi_send_cpu(int target_cpu, uint8_t ipi_vec) {
-    if (target_cpu < 0 || target_cpu >= SMP_MAX_CPUS)
+    if (target_cpu < 0 || target_cpu >= smp_cpu_count())
         return;
+
+    int hart = smp_hart_id(target_cpu);
+    if (hart < 0)
+        return;
+
     g_ipi_pending[target_cpu] |= (1u << ipi_vec);
 
-    unsigned long hart_mask = 1UL << target_cpu;
+    unsigned long hart_mask = 1UL << hart;
     sbi_send_ipi(&hart_mask);
 }
 
