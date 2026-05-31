@@ -16,6 +16,7 @@
 #include "ipi.h"
 #include "smp.h"
 #include "riscv_features.h"
+#include "guest_dtb.h"
 
 #define irq_printf safe_printf
 
@@ -138,12 +139,108 @@ static vcpu_t *get_current_vcpu(void) {
     return task ? task->vcpu : NULL;
 }
 
+#define SATP_MODE_SHIFT 60
+#define SATP_PPN_MASK   ((1UL << 44) - 1)
+#define PTE_V           (1UL << 0)
+#define PTE_R           (1UL << 1)
+#define PTE_W           (1UL << 2)
+#define PTE_X           (1UL << 3)
+#define PTE_PPN_MASK    ((1UL << 44) - 1)
+
+static bool guest_va_to_pa(u64 va, u64 *pa) {
+    u64 satp = csrr(CSR_VSATP);
+    u64 mode = satp >> SATP_MODE_SHIFT;
+    if (mode == SATP_MODE_OFF) {
+        *pa = va;
+        return true;
+    }
+
+    int top_level;
+    if (mode == SATP_MODE_SV39)
+        top_level = 2;
+    else if (mode == SATP_MODE_SV48)
+        top_level = 3;
+    else
+        return false;
+
+    u64 table_pa = (satp & SATP_PPN_MASK) << PAGE_SHIFT;
+    for (int level = top_level; level >= 0; level--) {
+        u64 idx = (va >> (PAGE_SHIFT + PAGE_LEVEL_WIDTH * level)) & 0x1ff;
+        ptw_t *table = (ptw_t *)phy_to_vir(table_pa);
+        ptw_t pte = table[idx];
+
+        if (!(pte.bits & PTE_V) || ((pte.bits & PTE_W) && !(pte.bits & PTE_R)))
+            return false;
+
+        if (pte.bits & (PTE_R | PTE_X)) {
+            u64 page_off_bits = PAGE_SHIFT + PAGE_LEVEL_WIDTH * level;
+            u64 page_off_mask = (1UL << page_off_bits) - 1;
+            *pa = (((pte.bits >> 10) & PTE_PPN_MASK) << PAGE_SHIFT) |
+                  (va & page_off_mask);
+            return true;
+        }
+
+        table_pa = ((pte.bits >> 10) & PTE_PPN_MASK) << PAGE_SHIFT;
+    }
+    return false;
+}
+
+static bool guest_read_u64_va(u64 va, u64 *value) {
+    u64 v = 0;
+    for (int i = 0; i < 8; i++) {
+        u64 pa;
+        if (!guest_va_to_pa(va + i, &pa))
+            return false;
+        v |= ((u64)*(u8 *)phy_to_vir(pa)) << (i * 8);
+    }
+    *value = v;
+    return true;
+}
+
+static void inject_guest_soft_irq(u64 hartid) {
+    hyper_task_t *task = riscv_find_guest_vcpu(hartid);
+    if (!task || !task->vcpu)
+        return;
+
+    u64 bit = (1UL << IRQ_VS_SOFT);
+    task->vcpu->carch.hvip |= bit;
+    if (task == current_task())
+        csrs(CSR_HVIP, bit);
+}
+
+static void clear_guest_soft_irq(void) {
+    vcpu_t *vcpu = get_current_vcpu();
+    if (!vcpu)
+        return;
+
+    u64 bit = (1UL << IRQ_VS_SOFT);
+    vcpu->carch.hvip &= ~bit;
+    csrc(CSR_HVIP, bit);
+}
+
+static void handle_legacy_send_ipi(struct cpu_user_regs *args) {
+    u64 mask;
+    if (args->a0 == 0) {
+        mask = (riscv_guest_vcpu_count() >= 64) ? ~0UL : ((1UL << riscv_guest_vcpu_count()) - 1);
+    } else if (!guest_read_u64_va(args->a0, &mask)) {
+        safe_printf("legacy send_ipi: failed to read guest mask at %lx\n", args->a0);
+        args->a0 = 0;
+        return;
+    }
+
+    for (u32 hart = 0; hart < riscv_guest_vcpu_count() && hart < 64; hart++) {
+        if (mask & (1UL << hart))
+            inject_guest_soft_irq(hart);
+    }
+    args->a0 = 0;
+}
+
 void do_stage2_fault(struct cpu_user_regs *regs, int cause) {
     u64 htval = csrr(CSR_HTVAL);
     u64 stval = csrr(CSR_STVAL);
 
     u64 fault_addr = (htval << 2) | (stval & 3);
-    fault_addr &= ~(PAGE_SIZE - 1);
+    u64 fault_page = fault_addr & ~(PAGE_SIZE - 1);
 
     int is_write = (cause == RISCV_EXCP_STORE_GUEST_AMO_ACCESS_FAULT);
 
@@ -164,9 +261,9 @@ void do_stage2_fault(struct cpu_user_regs *regs, int cause) {
         vcpu_emulate_mmio(vcpu, regs, fault_addr, is_write);
     } else {
         /* RAM — lazy stage-2 map */
-        u64 offset = fault_addr - region->gpa;
+        u64 offset = fault_page - region->gpa;
         u64 hpa = region->hpa + offset;
-        pg_map_stage2(fault_addr, hpa, PAGE_SIZE, region->attr, 0);
+        pg_map_stage2(fault_page, hpa, PAGE_SIZE, region->attr, 0);
         if (!riscv_has_svvptc())
             hfence();
     }
@@ -221,15 +318,29 @@ static void handle_vs_ecall(struct cpu_user_regs *args) {
         sbi_set_timer(args->a0);
         args->a0 = 0;
         break;
+    case SBI_EXT_0_1_CLEAR_IPI:
+        clear_guest_soft_irq();
+        args->a0 = 0;
+        break;
     case SBI_EXT_0_1_SEND_IPI:
-        sbi_send_ipi((const unsigned long *)args->a0);
+        handle_legacy_send_ipi(args);
+        break;
+    case SBI_EXT_0_1_REMOTE_FENCE_I:
+    case SBI_EXT_0_1_REMOTE_SFENCE_VMA:
+    case SBI_EXT_0_1_REMOTE_SFENCE_VMA_ASID:
+        hfence();
         args->a0 = 0;
         break;
     case SBI_EXT_BASE:
+        if (fid == SBI_EXT_BASE_PROBE_EXT && args->a0 == SBI_EXT_HSM) {
+            args->a0 = 0;
+            args->a1 = 0;
+            break;
+        }
+        /* fallthrough */
     case SBI_EXT_TIME:
     case SBI_EXT_IPI:
-    case SBI_EXT_RFENCE:
-    case SBI_EXT_HSM: {
+    case SBI_EXT_RFENCE: {
         /* Forward to host SBI */
         struct sbiret ret = sbi_ecall(ext, fid, args->a0, args->a1,
                                        args->a2, args->a3, args->a4, args->a5);
@@ -237,6 +348,10 @@ static void handle_vs_ecall(struct cpu_user_regs *args) {
         args->a1 = (u64)ret.value;
         break;
     }
+    case SBI_EXT_HSM:
+        args->a0 = (u64)SBI_ERR_NOT_SUPPORTED;
+        args->a1 = 0;
+        break;
     default:
         safe_printf("VS-ecall: ext=%lx fid=%lu\n", ext, fid);
         args->a0 = (u64)-1;

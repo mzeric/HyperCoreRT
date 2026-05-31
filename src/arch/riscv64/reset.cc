@@ -29,6 +29,7 @@ int init_hyper_low_level(void *args) {
     csrw(CSR_HCOUNTEREN, 0x7);
 
     riscv_features_init(args);
+    riscv_guest_config_init(args);
 
     init_mm();
     riscv_guest_dtb_init(args);
@@ -43,8 +44,12 @@ int init_hyper_low_level(void *args) {
     /* Enable S-mode external and software interrupts */
     csrs(sie, (1UL << IRQ_S_EXT) | (1UL << IRQ_S_SOFT));
 
-    safe_printf("creating guest task at 0x90080000\n");
-    create_task("guest", (void *)0x90080000, 10);
+    safe_printf("creating guest task at 0x%lx\n", riscv_guest_entry());
+    create_task("guest", (void *)riscv_guest_entry(), 10);
+    for (u32 hart = 1; hart < riscv_guest_vcpu_count(); hart++) {
+        safe_printf("creating guest hart%u at 0x%lx\n", hart, riscv_guest_entry());
+        riscv_create_guest_vcpu(hart, riscv_guest_entry(), riscv_guest_dtb_addr(), 10);
+    }
 
     /*
      * Wait for first timer tick — the timer IRQ triggers sched_yield()

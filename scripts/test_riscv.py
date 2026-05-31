@@ -29,9 +29,11 @@ CPP_CTOR = "modern cpp global ctor: 1"
 CPP_RAI = "modern cpp raii lock: 99"
 RISCV_BOOT = "HyperCoreRT RISC-V booting"
 GUEST_HELLO = "hello,guest"
+LINUX_BOOT = "Linux version"
+LINUX_VFS_PANIC = "Kernel panic - not syncing: VFS"
 
 FATAL_PATTERNS = (
-    "Kernel panic",
+    "Kernel panic:",
 )
 
 # ---------------------------------------------------------------------------
@@ -43,6 +45,10 @@ def existing_path(value):
     if not path.exists():
         raise argparse.ArgumentTypeError(f"path does not exist: {path}")
     return path
+
+
+def parse_int(value):
+    return int(value, 0)
 
 
 def parse_args():
@@ -59,9 +65,9 @@ def parse_args():
 
     parser = argparse.ArgumentParser(
         description="RISC-V hypervisor QEMU test runner.")
-    parser.add_argument("--mode", choices=["boot", "stress"],
+    parser.add_argument("--mode", choices=["boot", "stress", "linux"],
                         default="boot",
-                        help="Test mode: boot (boot only), stress (boot+repeated)")
+                        help="Test mode: boot (hello guest), stress, linux (boot Linux to VFS panic)")
     parser.add_argument("--runs", type=int, default=1,
                         help="Number of test runs.")
     parser.add_argument("--stop-on-fail", action="store_true",
@@ -77,6 +83,19 @@ def parse_args():
     parser.add_argument("--guest-bin", type=str, default=None,
                         help="Path to guest binary (ELF or raw). "
                         "Default: auto-detect from bazel-bin.")
+    parser.add_argument("--linux-image", type=existing_path,
+                        default=project_root / "linux-5.4.291_build" / "arch" / "riscv" / "boot" / "Image",
+                        help="Linux Image path for --mode linux.")
+    parser.add_argument("--guest-load-addr", type=parse_int, default=0x90200000,
+                        help="Guest Linux load/entry GPA for --mode linux.")
+    parser.add_argument("--guest-dtb-addr", type=parse_int, default=0x90f00000,
+                        help="Generated guest DTB GPA for --mode linux.")
+    parser.add_argument("--guest-ram-base", type=parse_int, default=0x90000000,
+                        help="Guest RAM base GPA for --mode linux.")
+    parser.add_argument("--guest-ram-size", type=parse_int, default=0x08000000,
+                        help="Guest RAM size for --mode linux.")
+    parser.add_argument("--guest-cpus", type=int, default=1,
+                        help="Guest vCPU count advertised in generated DTB for --mode linux.")
     parser.add_argument("--qemu", default=qemu_default)
     parser.add_argument("--boot-timeout", type=int, default=BOOT_TIMEOUT)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -85,6 +104,8 @@ def parse_args():
 
 def resolve_guest_bin(args, ci_dir):
     """Resolve guest binary path — use --guest-bin or auto-detect."""
+    if args.mode == "linux":
+        return Path(args.linux_image).expanduser().resolve()
     if args.guest_bin:
         path = Path(args.guest_bin).expanduser().resolve()
         if not path.exists():
@@ -113,6 +134,19 @@ def build_qemu_cmd(args, guest_bin):
         "-no-reboot",
         "-kernel", str(args.hyper_bin),
     ]
+
+    if args.mode == "linux":
+        hyper_args = " ".join([
+            f"guest_entry=0x{args.guest_load_addr:x}",
+            f"guest_dtb=0x{args.guest_dtb_addr:x}",
+            f"guest_ram_base=0x{args.guest_ram_base:x}",
+            f"guest_ram_size=0x{args.guest_ram_size:x}",
+            f"guest_vcpus={args.guest_cpus}",
+        ])
+        cmd += ["-append", hyper_args]
+        cmd += ["-device", f"loader,file={guest_bin},force-raw=on,addr=0x{args.guest_load_addr:x}"]
+        return cmd
+
     # Load guest binary at 0x90080000 via QEMU generic loader
     if guest_bin.suffix == ".bin":
         cmd += ["-device", f"loader,file={guest_bin},addr=0x90080000"]
@@ -138,7 +172,23 @@ def terminate_qemu(proc):
         pass
 
 
-def read_until(proc, needles, timeout, output_buf, verbose=False):
+def drain_output(proc, output_buf, verbose=False, duration=1.0):
+    """Drain QEMU output briefly after a fatal marker so logs include trap details."""
+    deadline = time.monotonic() + duration
+    while time.monotonic() < deadline:
+        ready, _, _ = select.select([proc.stdout], [], [], 0.1)
+        if not ready:
+            continue
+        chunk = os.read(proc.stdout.fileno(), 8192).decode("utf-8", errors="replace")
+        if not chunk:
+            continue
+        output_buf.append(chunk)
+        if verbose:
+            sys.stdout.write(chunk)
+            sys.stdout.flush()
+
+
+def read_until(proc, needles, timeout, output_buf, verbose=False, fatal_patterns=FATAL_PATTERNS):
     """Read QEMU output until one of *needles* is found or timeout."""
     deadline = time.monotonic() + timeout
     text = ""
@@ -162,8 +212,9 @@ def read_until(proc, needles, timeout, output_buf, verbose=False):
             sys.stdout.write(chunk)
             sys.stdout.flush()
 
-        for fatal in FATAL_PATTERNS:
+        for fatal in fatal_patterns:
             if fatal in text:
+                drain_output(proc, output_buf, verbose)
                 raise RuntimeError(f"fatal pattern: {fatal}")
 
         for needle in needles:
@@ -206,9 +257,21 @@ def test_stress(args, proc, output_parts):
     test_boot(args, proc, output_parts)
 
 
+def test_linux(args, proc, output_parts):
+    """Boot Linux until the expected no-root VFS panic."""
+    linux_fatal = ("Kernel panic:", "Oops -", "trap error")
+    read_until(proc, [CPP_SMOKE], args.boot_timeout, output_parts, args.verbose, linux_fatal)
+    read_until(proc, [CPP_CTOR], args.boot_timeout, output_parts, args.verbose, linux_fatal)
+    read_until(proc, [CPP_RAI], args.boot_timeout, output_parts, args.verbose, linux_fatal)
+    read_until(proc, ["creating guest task"], args.boot_timeout, output_parts, args.verbose, linux_fatal)
+    read_until(proc, [LINUX_BOOT], args.boot_timeout, output_parts, args.verbose, linux_fatal)
+    read_until(proc, [LINUX_VFS_PANIC], args.boot_timeout, output_parts, args.verbose, linux_fatal)
+
+
 TEST_FUNCS = {
     "boot": test_boot,
     "stress": test_stress,
+    "linux": test_linux,
 }
 
 

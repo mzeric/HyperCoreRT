@@ -9,6 +9,7 @@
 #include "riscv64_system.h"
 #include "mmu.h"
 #include "kmalloc.h"
+#include "guest_dtb.h"
 
 #include "arch_page.h"
 
@@ -56,7 +57,7 @@ static int init_direct_mapping(ptw_t *root, int start_level, int attr, int witho
 static void init_guest_memory() {
     /* Guest RAM: identity-mapped, guest sees its own physical addresses */
     pg_map(page_stage2_table_root, 0,
-           0x90000000, 0x90000000, 0x1000000,
+           riscv_guest_ram_base(), riscv_guest_ram_base(), riscv_guest_ram_size(),
            PAGE_ATTR_EXEC | PAGE_ATTR_READ | PAGE_ATTR_WRITE | PAGE_ATTR_USER,
            0);
 

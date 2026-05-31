@@ -18,6 +18,8 @@
 #include "timer.h"
 #include "kmalloc.h"
 #include "smp.h"
+#include "guest_dtb.h"
+#include "riscv_features.h"
 
 /* Per-CPU current task — single hart for Phase 1 */
 static hyper_task_t *g_current_task;
@@ -34,6 +36,7 @@ void set_current(void *c) {
 
 /* Dummy empty regs for first switch */
 static struct cpu_user_regs g_empty_regs;
+static int g_task_id = 1;
 
 void sink_task(void) {
     hyper_task_t *task = current_task();
@@ -55,10 +58,14 @@ static void init_task_regs(hyper_task_t *task, void *entry, uintptr_t stack) {
     arch_set_return_addr(&task->vcpu->regs, (uintptr_t)sink_task);
     arch_set_pc(&task->vcpu->regs, (uintptr_t)entry);
     arch_set_task_status(&task->vcpu->regs, 0);
+    if (riscv_has_fpu())
+        task->vcpu->regs.sstatus |= SSTATUS_FS_INITIAL;
+    if (riscv_has_vector())
+        task->vcpu->regs.sstatus |= SSTATUS_VS_INITIAL;
     task->vcpu->regs.sp = stack;
 }
 
-int create_task(const char *name, void *entry, int priority) {
+int riscv_create_guest_vcpu(u64 hartid, u64 entry, u64 a1, int priority) {
     hyper_task_t *task = (hyper_task_t *)kmalloc(sizeof(hyper_task_t));
     if (!task)
         return -1;
@@ -68,12 +75,12 @@ int create_task(const char *name, void *entry, int priority) {
     task->virq_lock = (spinlock_t){.lock = SPIN_UNLOCKED};
 
     task->priority = priority;
-    task->id = 1;
+    task->id = g_task_id++;
     task->state = TASK_READY;
     task->pcpu_affinity = 0;
-    task->mpidr = 0;
+    task->mpidr = hartid;
 
-    task->vcpu = create_vcpu(1, 0);
+    task->vcpu = create_vcpu((int)hartid, priority);
     if (!task->vcpu) {
         hyper_err("create vcpu failed");
         kfree(task);
@@ -81,15 +88,38 @@ int create_task(const char *name, void *entry, int priority) {
     }
 
     uintptr_t stack_ptr = (uintptr_t)kmalloc(4096) + 4096;
-    arch_vcpu_init(task->vcpu, (uintptr_t)entry, stack_ptr);
-    init_task_regs(task, entry, stack_ptr);
+    arch_vcpu_init(task->vcpu, entry, stack_ptr);
+    init_task_regs(task, (void *)entry, stack_ptr);
+    task->vcpu->regs.a0 = hartid;
+    task->vcpu->regs.a1 = a1;
 
-    if (name)
-        memcpy(task->name, name,
-               sizeof(task->name) < strlen(name) ? sizeof(task->name) : strlen(name));
+    memcpy(task->name, "guest", 5);
 
     simple_scheduler_sched(task);
     return 0;
+}
+
+int create_task(const char *name, void *entry, int priority) {
+    (void)name;
+    return riscv_create_guest_vcpu(0, (u64)entry, riscv_guest_dtb_addr(), priority);
+}
+
+hyper_task_t *riscv_find_guest_vcpu(u64 hartid) {
+    for (int i = 0; i < CONFIG_SMP_CPU_NUM; i++) {
+        if (g_running[i] && g_running[i]->mpidr == hartid)
+            return g_running[i];
+    }
+
+    arch_spin_lock(&g_sched_lock);
+    hyper_task_t *task = NULL;
+    list_for_each_entry(task, &g_ready_list, list) {
+        if (task->mpidr == hartid) {
+            arch_spin_unlock(&g_sched_lock);
+            return task;
+        }
+    }
+    arch_spin_unlock(&g_sched_lock);
+    return NULL;
 }
 
 /* Stubs for create_task2/3 — not needed on RISC-V Phase 1 */

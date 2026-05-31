@@ -12,8 +12,14 @@
 #include "mm.h"
 #include "safe_printf.h"
 
-/* Read instruction from guest memory at sepc (guest PA) via host direct mapping */
+/* Read instruction from guest memory at sepc (guest PA) or HTINST after guest MMU is on. */
 static u32 vcpu_fetch_inst(struct cpu_user_regs *regs) {
+    if (regs->sepc >= PAGE_VIRT_OFFSET) {
+        u32 htinst = (u32)csrr(CSR_HTINST);
+        if (htinst)
+            return htinst;
+    }
+
     uintptr_t host_va = phy_to_vir(regs->sepc);
     uint16_t *p = (uint16_t *)host_va;
 

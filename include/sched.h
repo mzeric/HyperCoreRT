@@ -48,6 +48,11 @@ int create_task(const char *name, void *entry, int priority);
 int create_task2(const char *name, void *entry, int priority);
 int create_task3(const char *name, void *__entry, int priority);
 
+#if defined(__riscv)
+int riscv_create_guest_vcpu(u64 hartid, u64 entry, u64 a1, int priority);
+hyper_task_t *riscv_find_guest_vcpu(u64 hartid);
+#endif
+
 void sched_yield(struct cpu_user_regs *irq_reg);
 hyper_task_t *current_task(void);
 void set_current(void *c);

@@ -23,6 +23,7 @@ vcpu_t *create_vcpu(int vcpu_id, int priority) {
 
     memset(vcpu, 0, sizeof(vcpu_t));
     INIT_LIST_HEAD(&vcpu->list);
+    vcpu->vcpu_id = vcpu_id;
     vcpu->priority = priority;
 
     vcpu->arch.stack = (uint64_t)((char *)kmalloc(VCPU_STACK_SIZE) + VCPU_STACK_SIZE);
@@ -318,12 +319,12 @@ int arch_vcpu_init(vcpu_t *vcpu, uintptr_t entry, uintptr_t stack) {
     /* Set up guest memory regions */
     INIT_LIST_HEAD(&vcpu->mem_region);
 
-    /* Guest RAM: identity-mapped, 0x90000000, 16MB, RWX */
+    /* Guest RAM: identity-mapped, RWX */
     struct mem_region *ram = (struct mem_region *)kmalloc(sizeof(struct mem_region));
     memset(ram, 0, sizeof(*ram));
-    ram->gpa  = 0x90000000;
-    ram->hpa  = 0x90000000;
-    ram->size = 0x1000000; /* 16MB */
+    ram->gpa  = riscv_guest_ram_base();
+    ram->hpa  = riscv_guest_ram_base();
+    ram->size = riscv_guest_ram_size();
     ram->attr = MEM_ACCESS_RWX | PAGE_ATTR_USER;
     ram->dev  = NULL;
     ram->match_name[0] = '\0';
@@ -340,6 +341,17 @@ int arch_vcpu_init(vcpu_t *vcpu, uintptr_t entry, uintptr_t stack) {
     strncpy(uart->match_name, "ns16550a", sizeof(uart->match_name) - 1);
     probe_emul_dev(uart);
     guest_mem_add_region(vcpu, uart);
+
+    /* Guest PLIC: direct map for Linux irqchip probing. */
+    struct mem_region *plic = (struct mem_region *)kmalloc(sizeof(struct mem_region));
+    memset(plic, 0, sizeof(*plic));
+    plic->gpa  = 0x0C000000;
+    plic->hpa  = 0x0C000000;
+    plic->size = 0x400000;
+    plic->attr = MEM_ACCESS_RW | PAGE_ATTR_USER;
+    plic->dev  = NULL;
+    plic->match_name[0] = '\0';
+    guest_mem_add_region(vcpu, plic);
 
     return 0;
 }
@@ -383,6 +395,17 @@ void vcpu_context_restore(vcpu_t *vcpu) {
     /* Restore hypervisor interrupt configuration */
     csrw(CSR_HIE,  vcpu->carch.hie);
     csrw(CSR_HVIP, vcpu->carch.hvip);
+
+    /* Delegate guest-local traps back to VS-mode. Keep VS ecalls in HS for SBI emulation. */
+    csrw(CSR_HEDELEG, (1UL << RISCV_EXCP_INST_ADDR_MIS) |
+                       (1UL << RISCV_EXCP_ILLEGAL_INST) |
+                       (1UL << RISCV_EXCP_BREAKPOINT) |
+                       (1UL << RISCV_EXCP_LOAD_ADDR_MIS) |
+                       (1UL << RISCV_EXCP_STORE_AMO_ADDR_MIS) |
+                       (1UL << RISCV_EXCP_U_ECALL) |
+                       (1UL << RISCV_EXCP_INST_PAGE_FAULT) |
+                       (1UL << RISCV_EXCP_LOAD_PAGE_FAULT) |
+                       (1UL << RISCV_EXCP_STORE_PAGE_FAULT));
 
     /* Delegate interrupts to VS-mode: VS-mode timer, external, software */
     csrw(CSR_HIDELEG, (1UL << IRQ_VS_SOFT) |
