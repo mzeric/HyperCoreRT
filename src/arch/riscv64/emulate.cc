@@ -104,10 +104,21 @@ static int inst_get_rd(u32 inst) {
 int vcpu_emulate_mmio(vcpu_t *vcpu, struct cpu_user_regs *regs,
                       uint64_t fault_addr, int is_write) {
     u32 inst = vcpu_fetch_inst(regs);
-    int len = inst_to_access_len(inst);
-    int is_store = inst_is_store(inst);
+    u64 htinst = csrr(CSR_HTINST);
+    u32 decode_inst = inst;
 
-    (void)is_write; /* use instruction decode instead */
+    /*
+     * RISC-V H may report a transformed instruction in HTINST. Some
+     * transformed stores keep bit0 set but bit1 clear; normalizing bit1
+     * restores the standard load/store opcode for register and width decode.
+     * Keep the original instruction bits for INSN_LEN() below.
+     */
+    if (htinst && ((decode_inst & 0x3) == 0x1))
+        decode_inst |= 0x2;
+
+    int len = inst_to_access_len(decode_inst);
+    int is_store = inst_is_store(decode_inst);
+    int access_is_store = is_store || is_write;
 
     /* Find the device for this address */
     struct mem_region *region = guest_mem_find_region(vcpu, fault_addr, 0);
@@ -118,16 +129,16 @@ int vcpu_emulate_mmio(vcpu_t *vcpu, struct cpu_user_regs *regs,
 
     struct emul_driver_ops *ops = region->dev->driver->ops;
 
-    if (is_store) {
+    if (access_is_store) {
         /* Write: extract source register value */
         uint64_t value;
-        if (INSN_IS_16BIT(inst)) {
+        if (INSN_IS_16BIT(decode_inst)) {
             /* Compressed stores: rs2' is in bits[4:2], maps to x(8+rs2') */
-            u32 rs2c = (inst >> 2) & 0x7;
+            u32 rs2c = (decode_inst >> 2) & 0x7;
             u32 rs2 = 8 + rs2c; /* x8..x15 */
             value = *((u64 *)regs + rs2);
         } else {
-            value = GET_RS2(inst, regs);
+            value = GET_RS2(decode_inst, regs);
         }
         ops->write(region->dev, fault_addr, len, value);
     } else {
@@ -135,9 +146,9 @@ int vcpu_emulate_mmio(vcpu_t *vcpu, struct cpu_user_regs *regs,
         uint64_t value = 0;
         ops->read(region->dev, fault_addr, len, &value);
 
-        int rd = inst_get_rd(inst);
+        int rd = inst_get_rd(decode_inst);
         if (rd != 0) {
-            SET_RD(inst, regs, value);
+            SET_RD(decode_inst, regs, value);
         }
     }
 
