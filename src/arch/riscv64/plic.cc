@@ -8,6 +8,7 @@
 #include "sched.h"
 #include "spin_lock.h"
 #include "ipi.h"
+#include "riscv_virt_irq_manager.h"
 #include <string.h>
 
 static inline void plic_write(u64 addr, u32 val) {
@@ -110,17 +111,12 @@ static void vplic_set_task_vseip(hyper_task_t *task, bool asserted) {
     if (!task || !task->vcpu)
         return;
 
-    u64 bit = 1UL << IRQ_VS_EXT;
     if (asserted) {
-        task->vcpu->carch.hvip |= bit;
-        if (task == current_task())
-            csrs(CSR_HVIP, bit);
-        else if (task->pcpu_affinity >= 0)
+        riscv_virt_irq_assert(task->vcpu, IRQ_VS_EXT);
+        if (task != current_task() && task->pcpu_affinity >= 0)
             ipi_send_reschedule(task->pcpu_affinity);
     } else {
-        task->vcpu->carch.hvip &= ~bit;
-        if (task == current_task())
-            csrc(CSR_HVIP, bit);
+        riscv_virt_irq_clear(task->vcpu, IRQ_VS_EXT);
     }
 }
 

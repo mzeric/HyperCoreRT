@@ -21,6 +21,8 @@
 #include "guest_dtb.h"
 #include "riscv_features.h"
 #include "plic.h"
+#include "riscv_timer_manager.h"
+#include "riscv_virt_irq_manager.h"
 
 /* Per-CPU current task and global running-task snapshot (required by sched.h). */
 static hyper_task_t *g_current_task[CONFIG_SMP_CPU_NUM];
@@ -178,7 +180,9 @@ static void __vcpu_switch(hyper_task_t *cur, hyper_task_t *next,
 
     /* Update current task tracking */
     set_current(next);
+    riscv_vcpu_timer_refresh(next->vcpu);
     riscv_vplic_refresh();
+    riscv_virt_irq_materialize(next->vcpu);
 
     /* Rearm timer for next preemption tick */
     hyp_timer_rearm();
@@ -192,7 +196,7 @@ void sched_yield(struct cpu_user_regs *irq_reg) {
         return;
 
     hyper_task_t *current = current_task();
-    hyper_task_t *task = simple_scheduler_next();
+    hyper_task_t *task = simple_scheduler_next_no_publish();
 
     if (!task)
         return;

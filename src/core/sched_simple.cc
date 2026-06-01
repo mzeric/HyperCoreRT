@@ -42,7 +42,7 @@ static void __insert_task_sorted(struct list_head *head, hyper_task_t *new_task)
 
 /* ---- Locked public API ---- */
 
-hyper_task_t *simple_scheduler_next(void)
+hyper_task_t *simple_scheduler_next_no_publish(void)
 {
     int my_cpu = cpu_id();
 
@@ -69,9 +69,16 @@ hyper_task_t *simple_scheduler_next(void)
     }
 
     __chain_extract_task(next);
-    set_current(next);
 
     arch_spin_unlock(&g_sched_lock);
+    return next;
+}
+
+hyper_task_t *simple_scheduler_next(void)
+{
+    hyper_task_t *next = simple_scheduler_next_no_publish();
+    if (next)
+        set_current(next);
     return next;
 }
 

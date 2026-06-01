@@ -9,6 +9,7 @@ void simple_scheduler_sched(hyper_task_t *task);
 void simple_scheduler_block(hyper_task_t *task);
 void simple_scheduler_unblock(hyper_task_t *task);
 hyper_task_t *simple_scheduler_next();
+hyper_task_t *simple_scheduler_next_no_publish();
 
 extern struct list_head g_ready_list;
 extern spinlock_t g_sched_lock;

@@ -33,6 +33,9 @@ CPP_CTOR = "modern cpp global ctor: 1"
 CPP_RAI = "modern cpp raii lock: 99"
 RISCV_BOOT = "HyperCoreRT RISC-V booting"
 GUEST_HELLO = "hello,guest"
+SBI_DIAG = "[sbi_diag] base=1 time=1 ipi=1 rfence=1 hsm=0"
+SBI_TIME_OK = "[sbi_diag] time_set_timer=ok"
+SBI_RFENCE_BAD_FID_OK = "[sbi_diag] rfence_bad_fid=ok"
 LINUX_BOOT = "Linux version"
 LINUX_VFS_PANIC = "Kernel panic - not syncing: VFS"
 READY_MARKER = "HyperCoreRT + Linux SMP - Ready"
@@ -313,6 +316,9 @@ def test_boot(args, proc, output_parts):
     read_until(proc, [CPP_RAI], args.boot_timeout, output_parts, args.verbose)
     read_until(proc, ["sstatus:"], args.boot_timeout, output_parts, args.verbose)
     read_until(proc, [GUEST_HELLO], args.boot_timeout, output_parts, args.verbose)
+    read_until(proc, [SBI_DIAG], args.boot_timeout, output_parts, args.verbose)
+    read_until(proc, [SBI_TIME_OK], args.boot_timeout, output_parts, args.verbose)
+    read_until(proc, [SBI_RFENCE_BAD_FID_OK], args.boot_timeout, output_parts, args.verbose)
 
     time.sleep(1)
 

@@ -6,7 +6,8 @@
 #define IPI_RESCHEDULE    0
 #define IPI_TLB_SHOOTDOWN 1
 #define IPI_CALL_FUNC     2
-#define IPI_MAX           3
+#define IPI_REMOTE_FENCE_ALL 3
+#define IPI_MAX           4
 
 typedef void (*ipi_func_t)(void *arg);
 

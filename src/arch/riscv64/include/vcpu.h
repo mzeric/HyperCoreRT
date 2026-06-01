@@ -9,14 +9,22 @@ struct arch_vcpu {
     uint64_t vmpidr;   /* only for aarch64 compat, unused on riscv */
 };
 
+struct riscv_vcpu_timer_state {
+    uint64_t deadline_cycles;
+    uint8_t armed;
+    uint8_t pending;
+};
+
 struct cpu_arch {
     uint64_t hstatus;
     uint64_t hie;
     uint64_t hip;
     uint64_t hvip;
+    uint64_t virt_irq_pending;
 
     /* VS-mode CSR state */
     uint64_t vsstatus;
+    uint64_t vsie;
     uint64_t vstvec;
     uint64_t vsscratch;
     uint64_t vsepc;
@@ -37,6 +45,8 @@ struct cpu_arch {
     uint64_t vlenb;
     void    *vregs;
     uint64_t vregs_size;
+
+    riscv_vcpu_timer_state timer;
 
     void *timer_priv;
 };

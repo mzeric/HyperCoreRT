@@ -15,7 +15,12 @@
  * FENCE.I — instruction-fetch fence (syncs i-cache with d-cache).
  */
 #define fence()    __asm__ __volatile__ ("fence"     : : : "memory")
-#define fence_i()  __asm__ __volatile__ ("fence.i"   : : : "memory")
+#define fence_i()  __asm__ __volatile__ ( \
+    ".option push\n"                    \
+    ".option arch, +zifencei\n"          \
+    "fence.i\n"                         \
+    ".option pop\n"                     \
+    : : : "memory")
 
 /*
  * Full barriers.

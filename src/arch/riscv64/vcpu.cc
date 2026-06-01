@@ -41,6 +41,7 @@ void destroy_vcpu(vcpu_t *vcpu) {
 }
 
 #define HSTATUS_VS (HSTATUS_SPV | HSTATUS_SPVP)
+#define HSTATUS_VCPU_MASK HSTATUS_VS
 
 static bool fpu_dirty(u64 vsstatus) {
     return (vsstatus & SSTATUS_FS) == SSTATUS_FS_DIRTY;
@@ -359,8 +360,9 @@ int arch_vcpu_init(vcpu_t *vcpu, uintptr_t entry, uintptr_t stack) {
 
 void vcpu_context_save(vcpu_t *vcpu) {
     /* Save H-extension CSRs */
-    vcpu->carch.hstatus   = csrr(CSR_HSTATUS);
+    vcpu->carch.hstatus   = csrr(CSR_HSTATUS) & HSTATUS_VCPU_MASK;
     vcpu->carch.vsstatus  = csrr(CSR_VSSTATUS);
+    vcpu->carch.vsie      = csrr(CSR_VSIE);
     vcpu->carch.vsepc     = csrr(CSR_VSEPC);
     vcpu->carch.vstvec    = csrr(CSR_VSTVEC);
     vcpu->carch.vsscratch = csrr(CSR_VSSCRATCH);
@@ -386,6 +388,7 @@ void vcpu_context_restore(vcpu_t *vcpu) {
 
     /* Restore VS-mode CSRs */
     csrw(CSR_VSSTATUS,  vcpu->carch.vsstatus);
+    csrw(CSR_VSIE,      vcpu->carch.vsie);
     csrw(CSR_VSEPC,     vcpu->carch.vsepc);
     csrw(CSR_VSTVEC,    vcpu->carch.vstvec);
     csrw(CSR_VSSCRATCH, vcpu->carch.vsscratch);
@@ -413,6 +416,9 @@ void vcpu_context_restore(vcpu_t *vcpu) {
                       (1UL << IRQ_VS_TIMER) |
                       (1UL << IRQ_VS_EXT));
 
-    /* Set HSTATUS.SPV=1 so sret enters VS-mode */
-    csrw(CSR_HSTATUS, vcpu->carch.hstatus);
+    /* Restore only vCPU-owned HSTATUS return bits; keep host policy bits intact. */
+    u64 hstatus = csrr(CSR_HSTATUS);
+    hstatus &= ~HSTATUS_VCPU_MASK;
+    hstatus |= vcpu->carch.hstatus & HSTATUS_VCPU_MASK;
+    csrw(CSR_HSTATUS, hstatus);
 }

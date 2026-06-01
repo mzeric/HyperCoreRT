@@ -2,40 +2,77 @@
  * RISC-V IPI implementation using SBI send_ipi.
  */
 #include "ipi.h"
+#include "riscv_ipi.h"
 #include "sbi_helper.h"
 #include "smp.h"
 #include "mm.h"
 #include "mmu.h"
 #include "inline_asm.h"
 #include "safe_printf.h"
+#include "arch_barrier.h"
 
 /* Per-CPU IPI message pending bits */
 volatile u32 g_ipi_pending[SMP_MAX_CPUS];
+static volatile u32 g_ipi_complete[SMP_MAX_CPUS][IPI_MAX];
 
-/* Accessor for exception handler */
-extern u32 ipi_get_pending(int cpu) {
-    return g_ipi_pending[cpu];
+static int ipi_validate_target(int target_cpu, uint8_t ipi_vec, int *hart) {
+    if (ipi_vec >= IPI_MAX)
+        return -1;
+    if (target_cpu < 0 || target_cpu >= smp_cpu_count())
+        return -1;
+
+    *hart = smp_hart_id(target_cpu);
+    if (*hart < 0)
+        return -1;
+    return 0;
 }
 
-extern void ipi_clear_pending(int cpu) {
-    g_ipi_pending[cpu] = 0;
+uint32_t riscv_ipi_take_pending(int cpu) {
+    if (cpu < 0 || cpu >= SMP_MAX_CPUS)
+        return 0;
+    return __sync_lock_test_and_set(&g_ipi_pending[cpu], 0);
 }
 
 /* TLB shootdown callback */
 static ipi_func_t g_tlb_shootdown_fn;
 
+static void ipi_remote_fence_all(void) {
+    fence_i();
+    hfence();
+}
+
 void ipi_send_cpu(int target_cpu, uint8_t ipi_vec) {
-    if (target_cpu < 0 || target_cpu >= smp_cpu_count())
+    int hart;
+    if (ipi_validate_target(target_cpu, ipi_vec, &hart) != 0)
         return;
 
-    int hart = smp_hart_id(target_cpu);
-    if (hart < 0)
-        return;
-
-    g_ipi_pending[target_cpu] |= (1u << ipi_vec);
+    __sync_fetch_and_or(&g_ipi_pending[target_cpu], (1u << ipi_vec));
+    arch_smp_wmb();
 
     unsigned long hart_mask = 1UL << hart;
     sbi_send_ipi(&hart_mask);
+}
+
+int riscv_ipi_send_cpu_sync(int target_cpu, uint8_t ipi_vec) {
+    int hart;
+    if (ipi_validate_target(target_cpu, ipi_vec, &hart) != 0)
+        return -1;
+    if (target_cpu == cpu_id()) {
+        ipi_handle(ipi_vec);
+        return 0;
+    }
+
+    u32 before = g_ipi_complete[target_cpu][ipi_vec];
+    __sync_fetch_and_or(&g_ipi_pending[target_cpu], (1u << ipi_vec));
+    arch_smp_wmb();
+
+    unsigned long hart_mask = 1UL << hart;
+    sbi_send_ipi(&hart_mask);
+
+    while (g_ipi_complete[target_cpu][ipi_vec] == before)
+        arch_cpu_relax();
+    arch_smp_mb();
+    return 0;
 }
 
 void ipi_send_reschedule(int target_cpu) {
@@ -63,11 +100,19 @@ void ipi_handle(uint8_t ipi_vec) {
         break;
     case IPI_CALL_FUNC:
         break;
+    case IPI_REMOTE_FENCE_ALL:
+        ipi_remote_fence_all();
+        break;
     }
+
+    if (ipi_vec < IPI_MAX)
+        __sync_fetch_and_add(&g_ipi_complete[cpu_id()][ipi_vec], 1);
 }
 
 void ipi_pcpu_init(void) {
     g_ipi_pending[cpu_id()] = 0;
+    for (int vec = 0; vec < IPI_MAX; vec++)
+        g_ipi_complete[cpu_id()][vec] = 0;
 }
 
 void ipi_tlb_shootdown(void) {
