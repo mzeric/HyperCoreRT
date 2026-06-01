@@ -15,3 +15,4 @@
 
 
 void init_mm();
+void riscv_secondary_mmu_init();

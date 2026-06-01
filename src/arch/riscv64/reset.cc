@@ -38,8 +38,8 @@ int init_hyper_low_level(void *args) {
     plic_init();
     plic_irq_enable(10); /* QEMU virt host UART RX */
     init_sbi();
-    smp_boot_secondaries();
     init_sched();
+    smp_boot_secondaries();
     init_timer();
 
     /* Enable S-mode external and software interrupts */

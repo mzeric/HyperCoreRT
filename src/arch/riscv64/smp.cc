@@ -6,7 +6,10 @@
 #include "riscv_sbi.h"
 #include "percpu.h"
 #include "exception.h"
+#include "ipi.h"
 #include "kmalloc.h"
+#include "mm.h"
+#include "timer.h"
 #include <string.h>
 
 /* Per-CPU scratch structures — each hart gets its own */
@@ -97,13 +100,18 @@ extern "C" void secondary_start(int cpu) {
     csrw(CSR_SSCRATCH, (u64)g_scratch[cpu]);
 
     setup_exception((void *)__riscv_vector);
+    riscv_secondary_mmu_init();
+    csrw(CSR_SCOUNTEREN, 0x7);
+    csrw(CSR_HCOUNTEREN, 0x7);
+    ipi_pcpu_init();
+    hyp_timer_rearm();
 
     safe_printf("smp: cpu %d (hart %d) online\n", cpu, smp_hart_id(cpu));
 
     csrs(sstatus, SSTATUS_SIE);
-    csrs(sie, (1UL << IRQ_S_SOFT));
+    csrs(sie, (1UL << IRQ_S_SOFT) | (1UL << IRQ_S_TIMER));
 
-    /* Park in WFI loop — scheduler integration can run work here later. */
+    /* Timer and reschedule IPIs enter sched_yield() from the trap handler. */
     while (1) {
         __asm__ volatile("wfi" ::: "memory");
     }

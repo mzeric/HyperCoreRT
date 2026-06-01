@@ -140,6 +140,37 @@ static vcpu_t *get_current_vcpu(void) {
     return task ? task->vcpu : NULL;
 }
 
+static u64 g_guest_timer_value[CONFIG_SMP_CPU_NUM];
+static int g_guest_timer_armed[CONFIG_SMP_CPU_NUM];
+
+static void refresh_guest_timer(vcpu_t *vcpu) {
+    if (!vcpu || vcpu->vcpu_id < 0 || vcpu->vcpu_id >= CONFIG_SMP_CPU_NUM)
+        return;
+    if (!g_guest_timer_armed[vcpu->vcpu_id])
+        return;
+    if (get_cycles() < g_guest_timer_value[vcpu->vcpu_id])
+        return;
+
+    u64 bit = 1UL << IRQ_VS_TIMER;
+    g_guest_timer_armed[vcpu->vcpu_id] = 0;
+    vcpu->carch.hvip |= bit;
+    if (vcpu == get_current_vcpu())
+        csrs(CSR_HVIP, bit);
+}
+
+static void set_guest_timer(u64 stime_value) {
+    vcpu_t *vcpu = get_current_vcpu();
+    if (!vcpu || vcpu->vcpu_id < 0 || vcpu->vcpu_id >= CONFIG_SMP_CPU_NUM)
+        return;
+
+    u64 bit = 1UL << IRQ_VS_TIMER;
+    g_guest_timer_value[vcpu->vcpu_id] = stime_value;
+    g_guest_timer_armed[vcpu->vcpu_id] = 1;
+    vcpu->carch.hvip &= ~bit;
+    csrc(CSR_HVIP, bit);
+    refresh_guest_timer(vcpu);
+}
+
 #define SATP_MODE_SHIFT 60
 #define SATP_PPN_MASK   ((1UL << 44) - 1)
 #define PTE_V           (1UL << 0)
@@ -207,6 +238,8 @@ static void inject_guest_soft_irq(u64 hartid) {
     task->vcpu->carch.hvip |= bit;
     if (task == current_task())
         csrs(CSR_HVIP, bit);
+    else if (task->pcpu_affinity >= 0)
+        ipi_send_reschedule(task->pcpu_affinity);
 }
 
 static void clear_guest_soft_irq(void) {
@@ -234,6 +267,28 @@ static void handle_legacy_send_ipi(struct cpu_user_regs *args) {
             inject_guest_soft_irq(hart);
     }
     args->a0 = 0;
+}
+
+static void handle_sbi_send_ipi(struct cpu_user_regs *args) {
+    u64 mask = args->a0;
+    u64 base = args->a1;
+    u32 count = riscv_guest_vcpu_count();
+
+    if (base == (u64)-1) {
+        for (u32 hart = 0; hart < count; hart++)
+            inject_guest_soft_irq(hart);
+    } else {
+        for (u32 bit = 0; bit < 64; bit++) {
+            if (!(mask & (1UL << bit)))
+                continue;
+            u64 hart = base + bit;
+            if (hart < count)
+                inject_guest_soft_irq(hart);
+        }
+    }
+
+    args->a0 = 0;
+    args->a1 = 0;
 }
 
 void do_stage2_fault(struct cpu_user_regs *regs, int cause) {
@@ -304,6 +359,11 @@ static void handle_s_soft_irq(void) {
         if (pending & 1)
             ipi_handle(vec);
     }
+
+    vcpu_t *vcpu = get_current_vcpu();
+    if (vcpu)
+        csrw(CSR_HVIP, vcpu->carch.hvip);
+    riscv_vplic_refresh();
 }
 
 static void handle_vs_ecall(struct cpu_user_regs *args) {
@@ -319,7 +379,7 @@ static void handle_vs_ecall(struct cpu_user_regs *args) {
         panic("guest shutdown");
         break;
     case SBI_EXT_0_1_SET_TIMER:
-        sbi_set_timer(args->a0);
+        set_guest_timer(args->a0);
         args->a0 = 0;
         break;
     case SBI_EXT_0_1_CLEAR_IPI:
@@ -341,17 +401,36 @@ static void handle_vs_ecall(struct cpu_user_regs *args) {
             args->a1 = 0;
             break;
         }
-        /* fallthrough */
-    case SBI_EXT_TIME:
+        {
+            struct sbiret ret = sbi_ecall(ext, fid, args->a0, args->a1,
+                                           args->a2, args->a3, args->a4, args->a5);
+            args->a0 = (u64)ret.error;
+            args->a1 = (u64)ret.value;
+            break;
+        }
     case SBI_EXT_IPI:
-    case SBI_EXT_RFENCE: {
-        /* Forward to host SBI */
-        struct sbiret ret = sbi_ecall(ext, fid, args->a0, args->a1,
-                                       args->a2, args->a3, args->a4, args->a5);
-        args->a0 = (u64)ret.error;
-        args->a1 = (u64)ret.value;
+        if (fid == SBI_EXT_IPI_SEND_IPI) {
+            handle_sbi_send_ipi(args);
+            break;
+        }
+        args->a0 = (u64)SBI_ERR_NOT_SUPPORTED;
+        args->a1 = 0;
         break;
-    }
+    case SBI_EXT_RFENCE:
+        hfence();
+        args->a0 = 0;
+        args->a1 = 0;
+        break;
+    case SBI_EXT_TIME:
+        if (fid == SBI_EXT_TIME_SET_TIMER) {
+            set_guest_timer(args->a0);
+            args->a0 = 0;
+            args->a1 = 0;
+            break;
+        }
+        args->a0 = (u64)SBI_ERR_NOT_SUPPORTED;
+        args->a1 = 0;
+        break;
     case SBI_EXT_HSM:
         args->a0 = (u64)SBI_ERR_NOT_SUPPORTED;
         args->a1 = 0;
@@ -367,16 +446,23 @@ static void handle_vs_ecall(struct cpu_user_regs *args) {
 
 extern "C" void do_exception(struct cpu_user_regs *args, u64 cause) {
     const struct fault_info *inf;
+    hyper_task_t *task = current_task();
+
+    if (task && task->mpidr == 0 && is_trap_from_guest(csrr(CSR_HSTATUS)))
+        riscv_mark_boot_vcpu_started();
 
     if (cause & (1ul << 63)) {
         cause &= ~(1UL << 63);
         switch (cause) {
         case IRQ_S_SOFT:
             handle_s_soft_irq();
+            sched_yield(args);
             break;
         case IRQ_S_TIMER:
-            uart_emul_service_host();
+            if (cpu_id() == 0)
+                uart_emul_service_host();
             handle_timer_irq();
+            refresh_guest_timer(get_current_vcpu());
             sched_yield(args);
             break;
         case IRQ_S_EXT:

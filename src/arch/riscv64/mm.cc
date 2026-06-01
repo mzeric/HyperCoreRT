@@ -36,6 +36,16 @@ void hfence() {
     hfence_gvma();
 }
 
+static u64 host_satp_value(void) {
+    return (reinterpret_cast<uintptr_t>(page_table_root) >> 12)
+           | (SATP_MODE_SV48 << 60);
+}
+
+static u64 guest_hgatp_value(void) {
+    return (reinterpret_cast<uintptr_t>(page_stage2_table_root) >> 12)
+           | (SATP_MODE_SV48 << 60);
+}
+
 /* -------------------------------------------------------------------
  * Host direct mapping
  * ------------------------------------------------------------------- */
@@ -64,12 +74,17 @@ static void init_guest_memory() {
     /* UART (0x20000000) is NOT mapped — guest traps on access for MMIO emulation */
 
     /* Install stage-2 root into HGATP */
-    u64 hgatp = (reinterpret_cast<uintptr_t>(page_stage2_table_root) >> 12)
-                | (SATP_MODE_SV48 << 60);
+    u64 hgatp = guest_hgatp_value();
     hfence();
     csrw(CSR_HGATP, hgatp);
 
     safe_printf("hgatp: %lx\n", csrr(CSR_HGATP));
+}
+
+void riscv_secondary_mmu_init() {
+    enable_mmu(host_satp_value());
+    csrw(CSR_HGATP, guest_hgatp_value());
+    hfence();
 }
 
 /* -------------------------------------------------------------------
@@ -96,9 +111,7 @@ void init_mm() {
     init_direct_mapping(page_table_root, 0,
                         PAGE_ATTR_EXEC | PAGE_ATTR_READ | PAGE_ATTR_WRITE, 1);
 
-    u64 satp = (reinterpret_cast<uintptr_t>(page_table_root) >> 12)
-               | (SATP_MODE_SV48 << 60);
-    enable_mmu(satp);
+    enable_mmu(host_satp_value());
 
     init_kmalloc();
 

@@ -20,18 +20,34 @@
 #include "smp.h"
 #include "guest_dtb.h"
 #include "riscv_features.h"
+#include "plic.h"
 
-/* Per-CPU current task — single hart for Phase 1 */
-static hyper_task_t *g_current_task;
-
-/* Global running-task snapshot (required by sched.h) */
+/* Per-CPU current task and global running-task snapshot (required by sched.h). */
+static hyper_task_t *g_current_task[CONFIG_SMP_CPU_NUM];
+static volatile int g_boot_vcpu_started;
 hyper_task_t *g_running[CONFIG_SMP_CPU_NUM];
 
-hyper_task_t *current_task(void) { return g_current_task; }
+hyper_task_t *current_task(void) {
+    int cpu = cpu_id();
+    if (cpu < 0 || cpu >= CONFIG_SMP_CPU_NUM)
+        cpu = 0;
+    return g_current_task[cpu];
+}
 
 void set_current(void *c) {
-    g_current_task = (hyper_task_t *)c;
-    g_running[cpu_id()] = (hyper_task_t *)c;
+    int cpu = cpu_id();
+    if (cpu < 0 || cpu >= CONFIG_SMP_CPU_NUM)
+        cpu = 0;
+    g_current_task[cpu] = (hyper_task_t *)c;
+    g_running[cpu] = (hyper_task_t *)c;
+}
+
+void riscv_mark_boot_vcpu_started(void) {
+    g_boot_vcpu_started = 1;
+}
+
+int riscv_boot_vcpu_started(void) {
+    return g_boot_vcpu_started;
 }
 
 /* Dummy empty regs for first switch */
@@ -77,7 +93,10 @@ int riscv_create_guest_vcpu(u64 hartid, u64 entry, u64 a1, int priority) {
     task->priority = priority;
     task->id = g_task_id++;
     task->state = TASK_READY;
-    task->pcpu_affinity = 0;
+    int online_cpus = smp_cpu_count();
+    if (online_cpus <= 0)
+        online_cpus = 1;
+    task->pcpu_affinity = (int)(hartid % (u64)online_cpus);
     task->mpidr = hartid;
 
     task->vcpu = create_vcpu((int)hartid, priority);
@@ -95,6 +114,7 @@ int riscv_create_guest_vcpu(u64 hartid, u64 entry, u64 a1, int priority) {
 
     memcpy(task->name, "guest", 5);
 
+    hyper_info("riscv: vcpu%lu pinned to pcpu%d\n", hartid, task->pcpu_affinity);
     simple_scheduler_sched(task);
     return 0;
 }
@@ -158,6 +178,7 @@ static void __vcpu_switch(hyper_task_t *cur, hyper_task_t *next,
 
     /* Update current task tracking */
     set_current(next);
+    riscv_vplic_refresh();
 
     /* Rearm timer for next preemption tick */
     hyp_timer_rearm();
@@ -166,6 +187,9 @@ static void __vcpu_switch(hyper_task_t *cur, hyper_task_t *next,
 void sched_yield(struct cpu_user_regs *irq_reg) {
     if (arch_get_pc(&g_empty_regs) == 0)
         g_empty_regs = *irq_reg;
+
+    if (cpu_id() != 0 && !riscv_boot_vcpu_started())
+        return;
 
     hyper_task_t *current = current_task();
     hyper_task_t *task = simple_scheduler_next();

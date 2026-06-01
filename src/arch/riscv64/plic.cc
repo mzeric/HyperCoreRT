@@ -7,6 +7,7 @@
 #include "riscv_csr.h"
 #include "sched.h"
 #include "spin_lock.h"
+#include "ipi.h"
 #include <string.h>
 
 static inline void plic_write(u64 addr, u32 val) {
@@ -94,36 +95,57 @@ static bool vplic_irq_deliverable_locked(u32 context, u32 irq) {
     return g_vplic.priority[irq] > g_vplic.threshold[context];
 }
 
-static bool vplic_has_deliverable_locked(void) {
-    for (u32 context = 0; context < VPLIC_CONTEXTS; context++) {
-        for (u32 irq = 1; irq <= PLIC_MAX_IRQ; irq++) {
-            if (vplic_irq_deliverable_locked(context, irq))
-                return true;
-        }
+static bool vplic_context_has_deliverable_locked(u32 context) {
+    if (context >= VPLIC_CONTEXTS)
+        return false;
+
+    for (u32 irq = 1; irq <= PLIC_MAX_IRQ; irq++) {
+        if (vplic_irq_deliverable_locked(context, irq))
+            return true;
     }
     return false;
 }
 
-static void vplic_set_vseip(bool asserted) {
-    hyper_task_t *task = current_task();
+static void vplic_set_task_vseip(hyper_task_t *task, bool asserted) {
     if (!task || !task->vcpu)
         return;
 
     u64 bit = 1UL << IRQ_VS_EXT;
     if (asserted) {
         task->vcpu->carch.hvip |= bit;
-        csrs(CSR_HVIP, bit);
+        if (task == current_task())
+            csrs(CSR_HVIP, bit);
+        else if (task->pcpu_affinity >= 0)
+            ipi_send_reschedule(task->pcpu_affinity);
     } else {
         task->vcpu->carch.hvip &= ~bit;
-        csrc(CSR_HVIP, bit);
+        if (task == current_task())
+            csrc(CSR_HVIP, bit);
     }
 }
 
 void riscv_vplic_refresh(void) {
+    hyper_task_t *task = current_task();
+    if (!task || !task->vcpu)
+        return;
+
+    u32 context = (u32)task->vcpu->vcpu_id;
     arch_spin_lock(&g_vplic_lock);
-    bool asserted = vplic_has_deliverable_locked();
+    bool asserted = vplic_context_has_deliverable_locked(context);
     arch_spin_unlock(&g_vplic_lock);
-    vplic_set_vseip(asserted);
+    vplic_set_task_vseip(task, asserted);
+}
+
+static void vplic_update_all_vseip(void) {
+    bool asserted[VPLIC_CONTEXTS];
+
+    arch_spin_lock(&g_vplic_lock);
+    for (u32 context = 0; context < VPLIC_CONTEXTS; context++)
+        asserted[context] = vplic_context_has_deliverable_locked(context);
+    arch_spin_unlock(&g_vplic_lock);
+
+    for (u32 context = 0; context < VPLIC_CONTEXTS; context++)
+        vplic_set_task_vseip(riscv_find_guest_vcpu(context), asserted[context]);
 }
 
 void riscv_vplic_raise(u32 irq) {
@@ -132,9 +154,8 @@ void riscv_vplic_raise(u32 irq) {
 
     arch_spin_lock(&g_vplic_lock);
     g_vplic.pending[irq / 32] |= 1U << (irq % 32);
-    bool asserted = vplic_has_deliverable_locked();
     arch_spin_unlock(&g_vplic_lock);
-    vplic_set_vseip(asserted);
+    vplic_update_all_vseip();
 }
 
 void riscv_vplic_clear(u32 irq) {
@@ -143,9 +164,8 @@ void riscv_vplic_clear(u32 irq) {
 
     arch_spin_lock(&g_vplic_lock);
     g_vplic.pending[irq / 32] &= ~(1U << (irq % 32));
-    bool asserted = vplic_has_deliverable_locked();
     arch_spin_unlock(&g_vplic_lock);
-    vplic_set_vseip(asserted);
+    vplic_update_all_vseip();
 }
 
 static u32 vplic_claim_locked(u32 context) {
@@ -217,10 +237,9 @@ static int vplic_read(struct emul_device *dev, uint64_t addr, int len, uint64_t 
                 *value = vplic_claim_locked((u32)context);
         }
     }
-    bool asserted = vplic_has_deliverable_locked();
     arch_spin_unlock(&g_vplic_lock);
 
-    vplic_set_vseip(asserted);
+    vplic_update_all_vseip();
     return 0;
 }
 
@@ -250,10 +269,9 @@ static int vplic_write(struct emul_device *dev, uint64_t addr, int len, uint64_t
             (void)context; /* Completion is edge-free for the simple in-memory PLIC. */
         }
     }
-    bool asserted = vplic_has_deliverable_locked();
     arch_spin_unlock(&g_vplic_lock);
 
-    vplic_set_vseip(asserted);
+    vplic_update_all_vseip();
     return 0;
 }
 

@@ -51,6 +51,8 @@ int create_task3(const char *name, void *__entry, int priority);
 #if defined(__riscv)
 int riscv_create_guest_vcpu(u64 hartid, u64 entry, u64 a1, int priority);
 hyper_task_t *riscv_find_guest_vcpu(u64 hartid);
+void riscv_mark_boot_vcpu_started(void);
+int riscv_boot_vcpu_started(void);
 #endif
 
 void sched_yield(struct cpu_user_regs *irq_reg);
