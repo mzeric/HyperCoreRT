@@ -3,6 +3,7 @@
 #include "arch_regs.h"
 #include "list.h"
 #include "arch_page.h"
+#include "spin_lock.h"
 
 struct arch_vcpu {
     uint64_t stack;
@@ -19,8 +20,8 @@ struct cpu_arch {
     uint64_t hstatus;
     uint64_t hie;
     uint64_t hip;
-    uint64_t hvip;
     uint64_t virt_irq_pending;
+    spinlock_t virt_irq_lock;
 
     /* VS-mode CSR state */
     uint64_t vsstatus;

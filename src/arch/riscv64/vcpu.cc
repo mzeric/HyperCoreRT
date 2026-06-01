@@ -23,6 +23,7 @@ vcpu_t *create_vcpu(int vcpu_id, int priority) {
 
     memset(vcpu, 0, sizeof(vcpu_t));
     INIT_LIST_HEAD(&vcpu->list);
+    INIT_SPIN_LOCK(vcpu->carch.virt_irq_lock);
     vcpu->vcpu_id = vcpu_id;
     vcpu->priority = priority;
 
@@ -371,8 +372,8 @@ void vcpu_context_save(vcpu_t *vcpu) {
     vcpu->carch.vsatp     = csrr(CSR_VSATP);
     vcpu->carch.hie       = csrr(CSR_HIE);
 
-    /* Save hypervisor interrupt pending */
-    vcpu->carch.hvip      = csrr(CSR_HVIP);
+    /* HVIP is a hardware projection of virt_irq_pending, not saved vCPU state. */
+    csrw(CSR_HVIP, 0);
 
     if (riscv_has_fpu() && fpu_dirty(vcpu->carch.vsstatus))
         fpu_save(vcpu);
@@ -398,7 +399,7 @@ void vcpu_context_restore(vcpu_t *vcpu) {
 
     /* Restore hypervisor interrupt configuration */
     csrw(CSR_HIE,  vcpu->carch.hie);
-    csrw(CSR_HVIP, vcpu->carch.hvip);
+    csrw(CSR_HVIP, 0);
 
     /* Delegate guest-local traps back to VS-mode. Keep VS ecalls in HS for SBI emulation. */
     csrw(CSR_HEDELEG, (1UL << RISCV_EXCP_INST_ADDR_MIS) |

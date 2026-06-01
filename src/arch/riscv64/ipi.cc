@@ -10,6 +10,11 @@
 #include "inline_asm.h"
 #include "safe_printf.h"
 #include "arch_barrier.h"
+#include "riscv_features.h"
+#include "timer.h"
+
+#define RISCV_IPI_SYNC_TIMEOUT_USEC 100000UL
+#define RISCV_IPI_SYNC_TIMEOUT_MIN_CYCLES 1000UL
 
 /* Per-CPU IPI message pending bits */
 volatile u32 g_ipi_pending[SMP_MAX_CPUS];
@@ -41,6 +46,11 @@ static void ipi_remote_fence_all(void) {
     hfence();
 }
 
+static u64 riscv_ipi_sync_timeout_cycles(void) {
+    u64 cycles = ((u64)riscv_timebase_frequency() * RISCV_IPI_SYNC_TIMEOUT_USEC) / 1000000UL;
+    return cycles ? cycles : RISCV_IPI_SYNC_TIMEOUT_MIN_CYCLES;
+}
+
 void ipi_send_cpu(int target_cpu, uint8_t ipi_vec) {
     int hart;
     if (ipi_validate_target(target_cpu, ipi_vec, &hart) != 0)
@@ -69,8 +79,17 @@ int riscv_ipi_send_cpu_sync(int target_cpu, uint8_t ipi_vec) {
     unsigned long hart_mask = 1UL << hart;
     sbi_send_ipi(&hart_mask);
 
-    while (g_ipi_complete[target_cpu][ipi_vec] == before)
+    u64 start = get_cycles();
+    u64 timeout = riscv_ipi_sync_timeout_cycles();
+    while (g_ipi_complete[target_cpu][ipi_vec] == before) {
+        if (get_cycles() - start >= timeout) {
+            safe_printf("riscv ipi sync timeout: target=%d vec=%u pending=0x%x complete=%u\n",
+                        target_cpu, ipi_vec, g_ipi_pending[target_cpu],
+                        g_ipi_complete[target_cpu][ipi_vec]);
+            return -1;
+        }
         arch_cpu_relax();
+    }
     arch_smp_mb();
     return 0;
 }

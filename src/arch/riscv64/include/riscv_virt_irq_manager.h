@@ -8,7 +8,7 @@ public:
     static void Assert(vcpu_t *vcpu, u32 irq);
     static void Clear(vcpu_t *vcpu, u32 irq);
     static void Materialize(vcpu_t *vcpu);
-    static u64 PendingImage(const vcpu_t *vcpu);
+    static u64 PendingImage(vcpu_t *vcpu);
 
 private:
     RiscvVirtIrqManager() = delete;

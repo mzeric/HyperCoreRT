@@ -9,10 +9,15 @@ u64 RiscvVirtIrqManager::IrqBit(u32 irq) {
     return 1UL << irq;
 }
 
-u64 RiscvVirtIrqManager::PendingImage(const vcpu_t *vcpu) {
+u64 RiscvVirtIrqManager::PendingImage(vcpu_t *vcpu) {
     if (!vcpu)
         return 0;
-    return vcpu->carch.hvip | vcpu->carch.virt_irq_pending;
+
+    int flags;
+    arch_spin_lock_irqsave(&vcpu->carch.virt_irq_lock, flags);
+    u64 image = vcpu->carch.virt_irq_pending;
+    arch_spin_unlock_irqrestore(&vcpu->carch.virt_irq_lock, flags);
+    return image;
 }
 
 void RiscvVirtIrqManager::Assert(vcpu_t *vcpu, u32 irq) {
@@ -20,12 +25,14 @@ void RiscvVirtIrqManager::Assert(vcpu_t *vcpu, u32 irq) {
     if (!vcpu || !bit)
         return;
 
+    int flags;
+    arch_spin_lock_irqsave(&vcpu->carch.virt_irq_lock, flags);
     vcpu->carch.virt_irq_pending |= bit;
-    vcpu->carch.hvip |= bit;
 
     hyper_task_t *task = current_task();
     if (task && task->vcpu == vcpu)
         csrs(CSR_HVIP, bit);
+    arch_spin_unlock_irqrestore(&vcpu->carch.virt_irq_lock, flags);
 }
 
 void RiscvVirtIrqManager::Clear(vcpu_t *vcpu, u32 irq) {
@@ -33,24 +40,28 @@ void RiscvVirtIrqManager::Clear(vcpu_t *vcpu, u32 irq) {
     if (!vcpu || !bit)
         return;
 
+    int flags;
+    arch_spin_lock_irqsave(&vcpu->carch.virt_irq_lock, flags);
     vcpu->carch.virt_irq_pending &= ~bit;
-    vcpu->carch.hvip &= ~bit;
 
     hyper_task_t *task = current_task();
     if (task && task->vcpu == vcpu)
         csrc(CSR_HVIP, bit);
+    arch_spin_unlock_irqrestore(&vcpu->carch.virt_irq_lock, flags);
 }
 
 void RiscvVirtIrqManager::Materialize(vcpu_t *vcpu) {
     if (!vcpu)
         return;
 
-    u64 image = PendingImage(vcpu);
-    vcpu->carch.hvip = image;
+    int flags;
+    arch_spin_lock_irqsave(&vcpu->carch.virt_irq_lock, flags);
+    u64 image = vcpu->carch.virt_irq_pending;
 
     hyper_task_t *task = current_task();
     if (task && task->vcpu == vcpu)
         csrw(CSR_HVIP, image);
+    arch_spin_unlock_irqrestore(&vcpu->carch.virt_irq_lock, flags);
 }
 
 void riscv_virt_irq_assert(vcpu_t *vcpu, u32 irq) {
