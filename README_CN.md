@@ -1,10 +1,10 @@
-# HyperCoreRT
+# HyperCore
 
 轻量级裸机虚拟机管理器（Hypervisor），面向 AArch64 和 RISC-V，专为实时和嵌入式场景设计。
 
 ## 概述
 
-HyperCoreRT 在 ARMv8-A 上运行于 EL2，在 RISC-V 上基于 H-extension 运行，支持虚拟化 Linux 和 RTOS 客户机。采用 Type-1 架构——虚拟机管理器直接接管硬件，无宿主操作系统。
+HyperCore 在 ARMv8-A 上运行于 EL2，在 RISC-V 上基于 H-extension 运行，支持虚拟化 Linux 和 RTOS 客户机。采用 Type-1 架构——虚拟机管理器直接接管硬件，无宿主操作系统。
 
 **当前状态：**
 
@@ -33,7 +33,7 @@ HyperCoreRT 在 ARMv8-A 上运行于 EL2，在 RISC-V 上基于 H-extension 运�
 │                Guest Linux                    │  EL0/EL1
 │  (或 RTOS)                                   │
 ├──────────────────────────────────────────────┤
-│              HyperCoreRT                      │  EL2
+│              HyperCore                        │  EL2
 │  ┌─────────┐ ┌────────┐ ┌─────────────────┐ │
 │  │ vCPU     │ │ vGICv3 │ │ Stage-2 MMU     │ │
 │  │ 调度器   │ │ 模拟   │ │ (LPAE)          │ │
@@ -53,7 +53,7 @@ RISC-V 路径的核心结构如下：
 ┌──────────────────────────────────────────────┐
 │                Guest Linux                    │  VS/VU
 ├──────────────────────────────────────────────┤
-│              HyperCoreRT                      │  HS
+│              HyperCore                        │  HS
 │  ┌─────────────┐ ┌─────────────┐ ┌──────────┐ │
 │  │ vCPU / Trap │ │ Virtual SBI │ │ Stage-2  │ │
 │  │ Manager     │ │ TIME/IPI/RF │ │ HGATP    │ │
@@ -69,7 +69,7 @@ RISC-V 路径的核心结构如下：
 
 ## 构建
 
-HyperCoreRT 支持两套互相独立的构建系统：Makefile 用于本地交叉编译和快速验证，Bazel 用于多架构工具链管理和 CI 式构建。
+HyperCore 支持两套互相独立的构建系统：Makefile 用于本地交叉编译和快速验证，Bazel 用于多架构工具链管理和 CI 式构建。
 
 ### 构建系统边界
 

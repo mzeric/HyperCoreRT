@@ -1,10 +1,10 @@
-# HyperCoreRT
+# HyperCore
 
 A lightweight baremetal hypervisor for AArch64, designed for real-time and embedded workloads.
 
 ## Overview
 
-HyperCoreRT runs at EL2 on ARMv8-A processors and supports virtualizing Linux and RTOS guests. It uses a type-1 architecture — the hypervisor owns the hardware directly with no host OS underneath.
+HyperCore runs at EL2 on ARMv8-A processors and supports virtualizing Linux and RTOS guests. It uses a type-1 architecture — the hypervisor owns the hardware directly with no host OS underneath.
 
 **Current status:** Boots Linux on QEMU virt (aarch64) with up to 2 guest vCPUs time-sliced on a single physical CPU. SMP scheduling, stage-2 page tables, virtual GICv3, virtual timer, and virtual UART are functional.
 
@@ -26,7 +26,7 @@ HyperCoreRT runs at EL2 on ARMv8-A processors and supports virtualizing Linux an
 │                Guest Linux                    │  EL0/EL1
 │  (or RTOS)                                   │
 ├──────────────────────────────────────────────┤
-│              HyperCoreRT                      │  EL2
+│              HyperCore                        │  EL2
 │  ┌─────────┐ ┌────────┐ ┌─────────────────┐ │
 │  │ vCPU     │ │ vGICv3 │ │ Stage-2 MMU     │ │
 │  │ Sched    │ │ Emul   │ │ (LPAE)          │ │
@@ -42,7 +42,7 @@ HyperCoreRT runs at EL2 on ARMv8-A processors and supports virtualizing Linux an
 
 ## Build
 
-HyperCoreRT supports two independent build systems: Makefile for local cross-compilation and quick validation, and Bazel for multi-architecture toolchain management and CI-style builds.
+HyperCore supports two independent build systems: Makefile for local cross-compilation and quick validation, and Bazel for multi-architecture toolchain management and CI-style builds.
 
 ### Build System Boundary
 
