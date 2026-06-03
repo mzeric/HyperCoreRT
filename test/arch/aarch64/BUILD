@@ -56,6 +56,7 @@ cc_binary(
     ] + [
         "-Wl,-T$(location :linker.lds)",
         "-Wl,--build-id=none",
+        "-Wl,--no-warn-rwx-segments",
     ],
     deps = [
         ":guest-core",

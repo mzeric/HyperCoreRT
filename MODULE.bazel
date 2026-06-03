@@ -5,8 +5,21 @@ module(
 
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "libfdt", version = "0.0.1")
-bazel_dep(name = "arm_toolchain_aarch64_none_elf", version= "10.3.1")
+bazel_dep(name = "toolchains_arm_gnu", version = "1.1.0")
 bazel_dep(name = "rules_cc", version = "0.2.14")
+
+local_path_override(
+    module_name = "libfdt",
+    path = "third_party/libfdt",
+)
+
+single_version_override(
+    module_name = "toolchains_arm_gnu",
+    patches = [
+        "//patches:fix_arm_rules_cc_compat.patch",
+    ],
+    patch_strip = 1,
+)
 
 # RISC-V cross-compilation toolchain
 bazel_dep(name = "toolchains_riscv_gnu", version = "0.0.2")
@@ -26,3 +39,9 @@ riscv_toolchain.riscv_none_elf(version = "13.2.0-2")
 use_repo(riscv_toolchain, "riscv_none_elf")
 
 register_toolchains("@riscv_none_elf//toolchain:all")
+
+arm_toolchain = use_extension("@toolchains_arm_gnu//:extensions.bzl", "arm_toolchain")
+arm_toolchain.aarch64_none_elf()
+use_repo(arm_toolchain, "aarch64_none_elf")
+
+register_toolchains("@aarch64_none_elf//toolchain:all")

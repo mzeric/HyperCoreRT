@@ -1,0 +1,43 @@
+--- a/toolchain/config.bzl
++++ b/toolchain/config.bzl
+@@ -1,5 +1,7 @@
+ load("@bazel_tools//tools/build_defs/cc:action_names.bzl", "ACTION_NAMES")
+-load("@rules_cc//cc:cc_toolchain_config_lib.bzl", "action_config", "feature", "flag_group", "flag_set")
++load("@rules_cc//cc:cc_toolchain_config_lib.bzl", "action_config", "feature", "flag_group", "flag_set", "make_variable", "tool_path")
++load("@rules_cc//cc/private/toolchain_config:cc_toolchain_config_info.bzl", "CcToolchainConfigInfo")
++load("@rules_cc//cc/private:cc_common.bzl", "cc_common")
+
+ def _tool_path(bins, toolchain_prefix, tool_name):
+     """Generate tool paths for GCC"""
+@@ -8,6 +10,12 @@ def _tool_path(bins, toolchain_prefix, tool_name):
+             return file
+     return None
+
++def _required_tool_path(ctx, tool_name):
++    tool = _tool_path(ctx.files.toolchain_bins, ctx.attr.toolchain_prefix, tool_name)
++    if tool == None:
++        fail("{} is missing from {}".format(tool_name, ctx.attr.toolchain_bins.label))
++    return tool.path
++
+ def _action_configs(ctx, action_names, tool_name, implies = []):
+     """Generate action configs"""
+     return [
+@@ -168,6 +176,18 @@ def _impl(ctx):
+             toolchain_linker_flags,
+             custom_linkopts,
+         ],
++        tool_paths = [
++            tool_path(name = "gcc", path = _required_tool_path(ctx, ctx.attr.gcc_tool)),
++            tool_path(name = "ar", path = _required_tool_path(ctx, "ar")),
++            tool_path(name = "cpp", path = _required_tool_path(ctx, "cpp")),
++            tool_path(name = "nm", path = _required_tool_path(ctx, "nm")),
++            tool_path(name = "ld", path = _required_tool_path(ctx, "ld")),
++            tool_path(name = "objdump", path = _required_tool_path(ctx, "objdump")),
++            tool_path(name = "strip", path = _required_tool_path(ctx, "strip")),
++        ],
++        make_variables = [
++            make_variable(name = "OBJCOPY", value = _required_tool_path(ctx, "objcopy")),
++        ],
+     )
+
+ cc_arm_gnu_toolchain_config = rule(

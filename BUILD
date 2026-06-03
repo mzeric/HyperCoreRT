@@ -228,6 +228,9 @@ cc_binary(
         "-Wl,-T$(location :linker.lds)",
         "-Wl,--build-id=none",
     ] + select({
+        "@platforms//cpu:aarch64": [
+            "-Wl,--no-warn-rwx-segments",
+        ],
         "@platforms//cpu:riscv64": [
             "-march=rv64imac_zicsr",
             "-mabi=lp64",
@@ -302,7 +305,7 @@ genrule(
 platform(
     name = "linux_aarch64",
     constraint_values = [
-        "@platforms//os:linux",
+        "@platforms//os:none",
         "@platforms//cpu:aarch64",
     ],
 )

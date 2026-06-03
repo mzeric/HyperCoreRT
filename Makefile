@@ -1,126 +1,171 @@
-CROSS_COMPILE ?= aarch64-none-elf-
+TARGET ?= aarch64
+SUPPORTED_TARGETS := aarch64 riscv64
+
+ifneq ($(filter $(TARGET),$(SUPPORTED_TARGETS)),$(TARGET))
+$(error unsupported TARGET '$(TARGET)'; use one of: $(SUPPORTED_TARGETS))
+endif
+
+ifeq ($(TARGET),aarch64)
+DEFAULT_CROSS_COMPILE := aarch64-none-elf-
+ARCH_DIR := src/arch/aarch64
+LINKER_SCRIPT := $(ARCH_DIR)/linker.lds
+ARCH_COPTS :=
+ARCH_LINKOPTS := -Wl,--no-warn-rwx-segments
+ARCH_DRIVER_SRCS := $(wildcard src/drivers/gic/*.cc) $(wildcard src/drivers/pl011/*.cc)
+ARCH_CORE_EXCLUDES :=
+ARCH_CORE_EXTRAS :=
+ARCH_CC_EXCLUDES :=
+else ifeq ($(TARGET),riscv64)
+DEFAULT_CROSS_COMPILE := riscv-none-elf-
+ARCH_DIR := src/arch/riscv64
+LINKER_SCRIPT := $(ARCH_DIR)/linker.ld
+ARCH_COPTS := -mcmodel=medany -march=rv64imac_zicsr -mabi=lp64
+ARCH_LINKOPTS := -march=rv64imac_zicsr -mabi=lp64 -Wl,-m,elf64lriscv
+ARCH_DRIVER_SRCS := $(wildcard src/drivers/pl011/*.cc)
+ARCH_CORE_EXCLUDES := \
+    src/core/emul_gic.cc \
+    src/core/emul_gicv3.cc \
+    src/core/emul_uart.cc \
+    src/core/emul_psci.cc \
+    src/core/sched.cc
+ARCH_CORE_EXTRAS := src/arch/riscv64/sched_riscv.cc
+ARCH_CC_EXCLUDES := src/arch/riscv64/sched_riscv.cc
+endif
+
+CROSS_COMPILE ?= $(DEFAULT_CROSS_COMPILE)
 CC      := $(CROSS_COMPILE)gcc
 CXX     := $(CROSS_COMPILE)g++
 AS      := $(CROSS_COMPILE)gcc
 OBJCOPY := $(CROSS_COMPILE)objcopy
 DTC     ?= dtc
 
-OUT     := output
-BUILD   := build
+OUT ?= output/$(TARGET)
+BUILD_DIR ?= build/$(TARGET)
 
-# Include paths (matches BUILD "includes" attributes)
-INCDIRS := -Iinclude -Isrc/arch/aarch64/include -Ithird_party/libfdt -I.
+INCDIRS := \
+    -Iinclude \
+    -I$(ARCH_DIR)/include \
+    -Ithird_party/libfdt \
+    -I.
 
-# --- copts per BUILD target ---
+COMMON_CFLAGS := \
+    -Wall \
+    -D_POSIX_C_SOURCE=200809L \
+    -ffreestanding \
+    -fno-stack-protector \
+    -fno-builtin \
+    -O0 \
+    -g \
+    $(ARCH_COPTS)
 
-# start_head (src/arch/aarch64/*.c)
-ARCH_CFLAGS   := -Wall -g -fno-stack-protector
+COMMON_CXXFLAGS := \
+    -std=gnu++17 \
+    -Wall \
+    -Wextra \
+    -Wno-unused-parameter \
+    -D_POSIX_C_SOURCE=200809L \
+    -ffreestanding \
+    -fno-stack-protector \
+    -fno-builtin \
+    -fno-exceptions \
+    -fno-rtti \
+    -fno-threadsafe-statics \
+    -O0 \
+    -g \
+    $(ARCH_COPTS)
 
-# hyper-core (src/core/*.c, src/main.c)
-CORE_CFLAGS   := -Wall -ffreestanding -fno-stack-protector -fno-builtin -O0 -g
+ASFLAGS := -D__ASSEMBLY__ -Wall -g $(ARCH_COPTS)
+LDFLAGS := \
+    -nostdlib \
+    -nostartfiles \
+    -nodefaultlibs \
+    -T $(BUILD_DIR)/linker.lds \
+    -Wl,--build-id=none \
+    $(ARCH_LINKOPTS)
+LDLIBS := -lc -lgcc
 
-# utils (src/utils/*.c)
-UTIL_CFLAGS   := -Wall
-
-# drivers (src/drivers/**/*.c)
-DRIVER_CFLAGS := -Wall
-
-# cxx-runtime (src/cxx_core/*.cc)
-CXXFLAGS      := -Wall -Wextra -Wno-unused-parameter -ffreestanding -fno-stack-protector \
-                 -fno-builtin -fno-exceptions -fno-rtti -fno-threadsafe-statics -O0 -g
-
-# assembly (src/arch/aarch64/*.S)
-ASFLAGS       := -D__ASSEMBLY__ -Wall -g
-
-# third_party/libfdt
-LIBFDT_CFLAGS := -Wall
-
-# linker
-LDFLAGS       := -nostdlib -nostartfiles \
-                 -T $(BUILD)/linker.lds -Wl,--build-id=none
-
-# --- Source files ---
-ARCH_SRCS   := $(wildcard src/arch/aarch64/*.c)
-CORE_SRCS   := $(wildcard src/core/*.c) src/main.c
-UTIL_SRCS   := $(wildcard src/utils/*.c)
-DRIVER_SRCS := $(wildcard src/drivers/gic/*.c) $(wildcard src/drivers/pl011/*.c)
-CXX_SRCS    := $(wildcard src/cxx_core/*.cc)
-AS_SRCS     := $(wildcard src/arch/aarch64/*.S)
+ARCH_CC_SRCS := $(filter-out $(ARCH_CC_EXCLUDES),$(wildcard $(ARCH_DIR)/*.cc))
+AS_SRCS := $(wildcard $(ARCH_DIR)/*.S)
+CORE_SRCS := $(filter-out $(ARCH_CORE_EXCLUDES),$(wildcard src/core/*.cc)) $(ARCH_CORE_EXTRAS) src/main.cc
+CXX_RUNTIME_SRCS := $(wildcard src/cxx_core/*.cc)
+UTIL_SRCS := $(wildcard src/utils/*.c) $(wildcard src/utils/*.cc)
 LIBFDT_SRCS := $(wildcard third_party/libfdt/*.c)
 
-# --- Object files ---
-ARCH_OBJS   := $(patsubst %.c,$(BUILD)/%.o,$(ARCH_SRCS))
-CORE_OBJS   := $(patsubst %.c,$(BUILD)/%.o,$(CORE_SRCS))
-UTIL_OBJS   := $(patsubst %.c,$(BUILD)/%.o,$(UTIL_SRCS))
-DRIVER_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(DRIVER_SRCS))
-CXX_OBJS    := $(patsubst %.cc,$(BUILD)/%.o,$(CXX_SRCS))
-AS_OBJS     := $(patsubst %.S,$(BUILD)/%.o,$(AS_SRCS))
-LIBFDT_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(LIBFDT_SRCS))
+SRCS := \
+    $(AS_SRCS) \
+    $(ARCH_CC_SRCS) \
+    $(CORE_SRCS) \
+    $(CXX_RUNTIME_SRCS) \
+    $(UTIL_SRCS) \
+    $(ARCH_DRIVER_SRCS) \
+    $(LIBFDT_SRCS)
 
-OBJS := $(AS_OBJS) $(ARCH_OBJS) $(CORE_OBJS) $(UTIL_OBJS) \
-        $(DRIVER_OBJS) $(CXX_OBJS) $(LIBFDT_OBJS)
+OBJS := $(addprefix $(BUILD_DIR)/,$(addsuffix .o,$(SRCS)))
+DEPS := $(OBJS:.o=.d)
 
-# --- Targets ---
-.PHONY: all clean
+.PHONY: all hyper clean check-tools print-config help aarch64 riscv64
 
-all: $(OUT)/hyper-elf $(OUT)/core.bin $(OUT)/hyper.dtb
+all: hyper
 
-$(OUT)/hyper-elf: $(OBJS) $(BUILD)/linker.lds
-	@mkdir -p $(OUT)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS) -lc -lgcc
+hyper: $(OUT)/hyper-elf $(OUT)/core.bin $(OUT)/hyper.dtb
+
+$(OUT)/hyper-elf: check-tools $(OBJS) $(BUILD_DIR)/linker.lds
+	@mkdir -p $(dir $@)
+	$(CXX) $(LDFLAGS) -o $@ $(OBJS) $(LDLIBS)
 
 $(OUT)/core.bin: $(OUT)/hyper-elf
 	$(OBJCOPY) -O binary $< $@
 
 $(OUT)/hyper.dtb: hyper.dts
-	@mkdir -p $(OUT)
-	dtc -O dtb $< -o $@
-
-# Preprocess linker script
-$(BUILD)/linker.lds: src/arch/aarch64/linker.lds include/config.h
 	@mkdir -p $(dir $@)
-	$(CC) -E -x c -Iinclude $< | grep -v '^#' > $@
+	$(DTC) -O dtb $< -o $@
 
-# --- Compile rules ---
-
-# Assembly
-$(BUILD)/%.o: %.S
+$(BUILD_DIR)/linker.lds: $(LINKER_SCRIPT) include/config.h
 	@mkdir -p $(dir $@)
-	$(AS) $(ASFLAGS) $(INCDIRS) -c -o $@ $<
+	$(CC) $(ARCH_COPTS) -E -x c -Iinclude $< | grep -v '^#' > $@
 
-# Arch sources
-$(BUILD)/src/arch/aarch64/%.o: src/arch/aarch64/%.c
+$(BUILD_DIR)/%.S.o: %.S
 	@mkdir -p $(dir $@)
-	$(CC) $(ARCH_CFLAGS) $(INCDIRS) -c -o $@ $<
+	$(AS) $(ASFLAGS) $(INCDIRS) -MMD -MP -c -o $@ $<
 
-# Core sources
-$(BUILD)/src/core/%.o: src/core/%.c
+$(BUILD_DIR)/%.c.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CORE_CFLAGS) $(INCDIRS) -c -o $@ $<
+	$(CC) $(COMMON_CFLAGS) $(INCDIRS) -MMD -MP -c -o $@ $<
 
-$(BUILD)/src/main.o: src/main.c
+$(BUILD_DIR)/%.cc.o: %.cc
 	@mkdir -p $(dir $@)
-	$(CC) $(CORE_CFLAGS) $(INCDIRS) -c -o $@ $<
+	$(CXX) $(COMMON_CXXFLAGS) $(INCDIRS) -MMD -MP -c -o $@ $<
 
-# Utils
-$(BUILD)/src/utils/%.o: src/utils/%.c
-	@mkdir -p $(dir $@)
-	$(CC) $(UTIL_CFLAGS) $(INCDIRS) -c -o $@ $<
+check-tools:
+	@command -v $(CC) >/dev/null || { echo "missing compiler: $(CC)"; exit 1; }
+	@command -v $(CXX) >/dev/null || { echo "missing compiler: $(CXX)"; exit 1; }
+	@command -v $(OBJCOPY) >/dev/null || { echo "missing objcopy: $(OBJCOPY)"; exit 1; }
+	@command -v $(DTC) >/dev/null || { echo "missing dtc: $(DTC)"; exit 1; }
 
-# Drivers
-$(BUILD)/src/drivers/%.o: src/drivers/%.c
-	@mkdir -p $(dir $@)
-	$(CC) $(DRIVER_CFLAGS) $(INCDIRS) -c -o $@ $<
+aarch64:
+	$(MAKE) TARGET=aarch64
 
-# C++
-$(BUILD)/%.o: %.cc
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) $(INCDIRS) -c -o $@ $<
+riscv64:
+	$(MAKE) TARGET=riscv64
 
-# libfdt
-$(BUILD)/third_party/%.o: third_party/%.c
-	@mkdir -p $(dir $@)
-	$(CC) $(LIBFDT_CFLAGS) $(INCDIRS) -c -o $@ $<
+print-config:
+	@printf 'TARGET=%s\n' '$(TARGET)'
+	@printf 'CROSS_COMPILE=%s\n' '$(CROSS_COMPILE)'
+	@printf 'CC=%s\n' '$(CC)'
+	@printf 'CXX=%s\n' '$(CXX)'
+	@printf 'OUT=%s\n' '$(OUT)'
+	@printf 'BUILD_DIR=%s\n' '$(BUILD_DIR)'
+	@printf 'LINKER_SCRIPT=%s\n' '$(LINKER_SCRIPT)'
+
+help:
+	@printf 'Usage:\n'
+	@printf '  make TARGET=aarch64 [CROSS_COMPILE=aarch64-none-elf-]\n'
+	@printf '  make TARGET=riscv64 [CROSS_COMPILE=riscv-none-elf-]\n'
+	@printf '  make aarch64\n'
+	@printf '  make riscv64\n'
+	@printf '  make clean\n'
 
 clean:
-	rm -rf $(BUILD) $(OUT)
+	rm -rf build output
+
+-include $(DEPS)

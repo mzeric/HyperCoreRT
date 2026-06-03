@@ -1,5 +1,4 @@
 build --enable_bzlmod
-build --registry=http://39.106.23.49:8443
 build --incompatible_enable_cc_toolchain_resolution
 build --platforms=//:linux_aarch64
 build --workspace_status_command=./scripts/gen_version.sh

@@ -78,7 +78,7 @@ SECTIONS{
     . += 0x200000;
     _heap_top_ = .;
   }
-.=ALIGN(0x1000);
+. = ALIGN(0x1000);
 	.hvc_stack :
 	{
 		PROVIDE(_hvc_stack_start = .);

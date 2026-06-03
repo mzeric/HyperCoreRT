@@ -2,10 +2,10 @@
 
 /*
  * Newlib's sys/cdefs.h defines a few Linux-style attribute helper names.
- * Include it first on RISC-V, then replace the conflicting helpers with the
- * HyperCoreRT forms so later libc headers do not warn about redefinition.
+ * Include it first, then replace the conflicting helpers with the HyperCoreRT
+ * forms so later libc headers do not warn about redefinition.
  */
-#if defined(__riscv) && !defined(__ASSEMBLY__)
+#if !defined(__ASSEMBLY__)
 #if defined(__has_include)
 #if __has_include(<sys/cdefs.h>)
 #include <sys/cdefs.h>
