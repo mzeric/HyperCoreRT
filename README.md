@@ -42,23 +42,64 @@ HyperCoreRT runs at EL2 on ARMv8-A processors and supports virtualizing Linux an
 
 ## Build
 
-HyperCoreRT supports two build systems: **Makefile** for quick builds and **Bazel** for multi-architecture development.
+HyperCoreRT supports two independent build systems: Makefile for local cross-compilation and quick validation, and Bazel for multi-architecture toolchain management and CI-style builds.
+
+### Build System Boundary
+
+Makefile and Bazel are separate entry points. They do not call each other and do not share toolchain resolution logic:
+
+| Entry | Toolchain source | Architecture selection | Output directory | Use case |
+|-------|------------------|------------------------|------------------|----------|
+| Makefile | Locally installed cross toolchain selected by `CROSS_COMPILE` | `TARGET=aarch64` or `TARGET=riscv64` | `output/<target>/` | Local cross-compilation, quick validation |
+| Bazel | Bzlmod/toolchain resolution downloads and registers toolchains | `--platforms=//:linux_aarch64` or `--platforms=//:linux_riscv64` | `bazel-bin/` and `output/` | Fresh-environment builds, CI, multi-arch toolchain management |
+
+Makefile uses the local toolchain prefix from `CROSS_COMPILE=/path/to/prefix-`. Bazel does not use Makefile's `CROSS_COMPILE`; its compiler is selected by the platform/toolchain configuration in `MODULE.bazel` and `BUILD`.
 
 ### Makefile (Quick Start)
 
 #### Prerequisites
 
-- `aarch64-none-elf-gcc` (ARM bare-metal toolchain with newlib)
+- AArch64: `aarch64-none-elf-gcc/g++/objcopy` or a compatible bare-metal/newlib cross toolchain
+- RISC-V: `riscv-none-elf-gcc/g++/objcopy` or a compatible bare-metal/newlib cross toolchain
 - `dtc` (device tree compiler)
 - `make`
 
 #### Compile
 
 ```bash
-make CROSS_COMPILE=aarch64-none-elf-
+# AArch64
+make TARGET=aarch64
+
+# RISC-V
+make TARGET=riscv64
+
+# Equivalent shortcut targets
+make aarch64
+make riscv64
 ```
 
-Output in `output/`:
+`TARGET` selects the architecture-specific sources, include directory, linker script, and default cross-compiler prefix. Output is written to `output/<target>/`.
+
+Makefile parameters:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `TARGET` | `aarch64` | Target architecture; supports `aarch64` and `riscv64` |
+| `CROSS_COMPILE` | Depends on `TARGET` | Cross-compiler prefix; AArch64 defaults to `aarch64-none-elf-`, RISC-V defaults to `riscv-none-elf-` |
+| `DTC` | `dtc` | Device tree compiler path |
+| `OUT` | `output/<target>` | Output directory |
+| `BUILD_DIR` | `build/<target>` | Intermediate build directory |
+
+Override `CROSS_COMPILE` if your local toolchain uses a different prefix:
+
+```bash
+make TARGET=riscv64 CROSS_COMPILE=riscv64-unknown-elf-
+make TARGET=aarch64 CROSS_COMPILE=aarch64-linux-gnu-
+```
+
+The default `*-none-elf` bare-metal/newlib toolchains are used because the hypervisor runs in a bare-metal environment while still relying on libc/newlib symbols such as `printf`, `memset`, `memmove`, `memcmp`, `strlen`, and `strnlen`. Linux glibc toolchains such as `riscv64-linux-gnu-` are usually not suitable for the current `rv64imac/lp64` bare-metal configuration.
+
+Makefile uses `-std=gnu++17`. The codebase follows C++17, but the current low-level code also uses GNU extensions such as `typeof` and statement expressions.
 
 | File | Description |
 |------|-------------|
@@ -82,22 +123,27 @@ make clean
 
 This project targets multiple CPU architectures (aarch64, riscv64) with different toolchains, compiler flags, source files, and per-arch drivers. Bazel provides several advantages over Makefile for this scenario:
 
-- **Toolchains as Bazel packages** — no need to manually download compilers; Bazel automatically downloads them during the build, enabling one-command builds on fresh environments.
-- **Platform-based toolchain resolution** — `--platforms=//:linux_aarch64` automatically selects the correct cross-compiler, flags, and sources. No manual `CROSS_COMPILE=` or `ifeq` branches needed.
-- **Correct incremental builds** — content-hash based caching, not timestamps. Changing a header file triggers exactly the right recompilations, never too many or too few.
-- **Hermetic sandboxing** — build actions can only access explicitly declared inputs. Catches missing `-I` paths at build time instead of runtime crashes from pulling in wrong system headers.
-- **External dependency management** — libfdt and toolchains are fetched and versioned via Bzlmod, no manual downloads or git submodules.
+- **Toolchain package management** - compilers are managed as Bazel external dependencies and can be fetched during the build.
+- **Platform-based toolchain resolution** - `--platforms=//:linux_aarch64` or `--platforms=//:linux_riscv64` selects the correct compiler, flags, and sources.
+- **Correct incremental builds** - content-hash based caching, not timestamps.
+- **Hermetic sandboxing** - build actions can only access explicitly declared inputs.
+- **External dependency management** - libfdt and toolchains are versioned through Bzlmod/local overrides.
 
 #### Build with Bazel
 
 ```bash
 # AArch64
-bazel build //:hyper
+bazel build //:hyper --platforms=//:linux_aarch64
+
+# RISC-V
+bazel build //:hyper --platforms=//:linux_riscv64
 ```
+
+Note: AArch64 and RISC-V Bazel outputs use the same names, including `bazel-bin/core.bin`, `bazel-bin/hyper-elf`, and `bazel-bin/hyper.dtb`. Rebuild the target architecture before running it.
 
 #### Build Artifacts
 
-`output/` directory contents:
+Bazel outputs are mainly under `bazel-bin/`:
 
 | File | Description |
 |------|-------------|

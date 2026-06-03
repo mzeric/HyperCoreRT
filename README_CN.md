@@ -69,7 +69,7 @@ RISC-V 路径的核心结构如下：
 
 ## 构建
 
-HyperCoreRT 支持两套互相独立的构建系统：Makefile 用于无 Bazel 环境下的本地交叉编译，Bazel 用于多架构工具链管理和 CI 式构建。
+HyperCoreRT 支持两套互相独立的构建系统：Makefile 用于本地交叉编译和快速验证，Bazel 用于多架构工具链管理和 CI 式构建。
 
 ### 构建系统边界
 
@@ -77,16 +77,16 @@ Makefile 和 Bazel 是两套独立入口，不互相调用，也不共享工具�
 
 | 构建入口 | 工具链来源 | 架构选择方式 | 输出目录 | 适用场景 |
 |----------|------------|--------------|----------|----------|
-| Makefile | 本机已安装的交叉工具链，通过 `CROSS_COMPILE` 指定 | `TARGET=aarch64` 或 `TARGET=riscv64` | `output/<target>/` | 无 Bazel 环境、快速本地交叉编译 |
+| Makefile | 本机已安装的交叉工具链，通过 `CROSS_COMPILE` 指定 | `TARGET=aarch64` 或 `TARGET=riscv64` | `output/<target>/` | 本地交叉编译、快速验证 |
 | Bazel | Bzlmod/toolchain resolution 自动拉取并注册工具链 | `--platforms=//:linux_aarch64` 或 `--platforms=//:linux_riscv64` | `bazel-bin/` 和 `output/` | 新环境一键构建、CI、多架构工具链管理 |
 
-Makefile 假设环境中没有 Bazel，因此不会使用 Bazel 下载的工具链，也不会解析 `MODULE.bazel`。如果本机 PATH 中没有默认工具链，需要通过 `CROSS_COMPILE=/path/to/prefix-` 显式指定。Bazel 则不使用 Makefile 的 `CROSS_COMPILE`，由 `MODULE.bazel` 和 `BUILD` 中的 platform/toolchain 配置决定编译器。
+Makefile 通过 `CROSS_COMPILE=/path/to/prefix-` 使用本机交叉工具链。Bazel 不使用 Makefile 的 `CROSS_COMPILE`，由 `MODULE.bazel` 和 `BUILD` 中的 platform/toolchain 配置决定编译器。
 
 ### Makefile（快速开始）
 
 #### 依赖
 
-- AArch64：`aarch64-none-elf-gcc/g++/objcopy` 或兼容交叉工具链
+- AArch64：`aarch64-none-elf-gcc/g++/objcopy` 或兼容裸机/newlib 交叉工具链
 - RISC-V：`riscv-none-elf-gcc/g++/objcopy` 或兼容裸机/newlib 交叉工具链
 - `dtc`（设备树编译器）
 - `make`
@@ -105,7 +105,7 @@ make aarch64
 make riscv64
 ```
 
-Makefile 不依赖 Bazel。`TARGET` 选择架构后，Makefile 会选择对应的源码、架构 include、linker script 和默认交叉编译器前缀。输出位于 `output/<target>/`：
+`TARGET` 选择架构后，Makefile 会选择对应的源码、架构 include、linker script 和默认交叉编译器前缀。输出位于 `output/<target>/`：
 
 Makefile 参数说明：
 
@@ -124,7 +124,7 @@ make TARGET=riscv64 CROSS_COMPILE=riscv64-unknown-elf-
 make TARGET=aarch64 CROSS_COMPILE=aarch64-linux-gnu-
 ```
 
-注意：RISC-V 默认要求裸机/newlib 工具链。`riscv64-linux-gnu-` 这类 Linux glibc 工具链通常不适合当前 `rv64imac/lp64` 裸机配置。
+注意：默认使用 `*-none-elf` 裸机/newlib 工具链，是因为当前 Hypervisor 虽然运行在裸机环境，但仍依赖工具链 libc/newlib 提供的基础符号，例如 `printf`、`memset`、`memmove`、`memcmp`、`strlen`、`strnlen` 等。`riscv64-linux-gnu-` 这类 Linux glibc 工具链通常不适合当前 `rv64imac/lp64` 裸机配置。
 
 Makefile 使用 `-std=gnu++17`。代码基线仍是 C++17，但当前代码使用了 `typeof`、statement expression 等 GNU 扩展，因此直编入口需要启用 GNU C++17 方言。
 
