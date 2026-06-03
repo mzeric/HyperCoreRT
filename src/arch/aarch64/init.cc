@@ -777,10 +777,10 @@ void switch_to_el2(void *stack, void *entry, void *dtb_arg) {
     void *gicr_base = (void *)(uintptr_t)GIC_GICR_BASE;
 
     do {
-        writel(gicr_base + GICR_PWRR, PWRR_ON);
+        writel((void *)((uintptr_t)gicr_base + GICR_PWRR), PWRR_ON);
 
 
-    } while ((readl(gicr_base + GICR_PWRR) & PWRR_RDPD) != PWRR_ON);
+    } while ((readl((void *)((uintptr_t)gicr_base + GICR_PWRR)) & PWRR_RDPD) != PWRR_ON);
 #endif
     // hcr_val &= ~1;//disable vmmu;
 
@@ -930,7 +930,7 @@ static void init_interrupt(void)
     void *gicr_base = (void *)ioremap(g_hyper_config.host_gic.gicr_base,
                                       g_hyper_config.host_gic.gicr_size, MT_DEVICE_nGnRnE);
 
-    hyper_info("GICv - %x", readl(gicd_base + 4));
+    hyper_info("GICv - %x", readl((void *)((uintptr_t)gicd_base + 4)));
     init_gicv3(gicd_base, gicc_base, gicr_base);
     gic_vcpu_init_pcpu();
     ipi_pcpu_init();

@@ -16,6 +16,7 @@ single_version_override(
     patches = [
         "//patches:fix_riscv_rules_cc_compat.patch",
         "//patches:fix_riscv_target_constraints.patch",
+        "//patches:fix_riscv_glob.patch",
     ],
     patch_strip = 1,
 )

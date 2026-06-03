@@ -124,13 +124,13 @@ TimerValue is treated as a signed 32-bit integer.*/
 #define WRITE_SYSREG64(name, v)                                                                    \
     do {                                                                                           \
         uint64_t _r = v;                                                                           \
-        asm volatile("msr "__stringify(name) ", %0" : : "r"(_r));                                  \
+        asm volatile("msr " __stringify(name) ", %0" : : "r"(_r));                                 \
     } while (0)
 
 #define READ_SYSREG64(name)                                                                        \
     ({                                                                                             \
         uint64_t _r;                                                                               \
-        asm volatile("mrs  %0, "__stringify(name) : "=r"(_r));                                     \
+        asm volatile("mrs  %0, " __stringify(name) : "=r"(_r));                                    \
         _r;                                                                                        \
     })
 
@@ -209,7 +209,7 @@ static inline uint64_t read_offset() {
 }
 
 void dealy(uint64_t c) {
-    for (int i = 0; i < c; ++i)
+    for (uint64_t i = 0; i < c; ++i)
         ;
 }
 

@@ -5,7 +5,7 @@
 
 #define csrr(csr)                                                                                  \
     ({                                                                                             \
-        register unsigned long __v;                                                                \
+        unsigned long __v;                                                                         \
         __asm__ __volatile__("csrr %0, " STR(csr) : "=r"(__v) : : "memory");                           \
         __v;                                                                                       \
     })

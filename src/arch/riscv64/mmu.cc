@@ -176,6 +176,8 @@ static int pg_unmap_4k(ptw_t *pre_tbl, int level, vaddr_t vir_addr) {
         free_one_page(PHY_TO_FN(next_tbl_phy));
         cur_pte->bits = 0;
     }
+
+    return 0;
 }
 
 int pg_map_4k(ptw_t *root, int start_level, vaddr_t vaddr, paddr_t paddr, int attr, int without_mmu) {
@@ -238,7 +240,7 @@ int pg_map_huge(ptw_t *root, int start_level, vaddr_t vaddr, paddr_t paddr, uint
 }
 
 int host_map_one_page(vaddr_t vir, paddr_t phy, int attr){
-    pg_map(page_table_root, 0, vir, phy, PAGE_SIZE, attr, 0);
+    return pg_map(page_table_root, 0, vir, phy, PAGE_SIZE, attr, 0);
 }
 
 //FIXME

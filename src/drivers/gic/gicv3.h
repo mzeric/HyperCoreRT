@@ -129,11 +129,11 @@ struct rdist_region {
 
 #define WRITE_SYSREG64(v, name) do {                    \
     uint64_t _r = v;                                    \
-    asm volatile("msr "__stringify(name)", %0" : : "r" (_r));       \
+    asm volatile("msr " __stringify(name) ", %0" : : "r" (_r));     \
 } while (0)
 #define READ_SYSREG64(name) ({                          \
     uint64_t _r;                                        \
-    asm volatile("mrs  %0, "__stringify(name) : "=r" (_r));         \
+    asm volatile("mrs  %0, " __stringify(name) : "=r" (_r));        \
     _r; })
 
 #define READ_SYSREG(name)     READ_SYSREG64(name)

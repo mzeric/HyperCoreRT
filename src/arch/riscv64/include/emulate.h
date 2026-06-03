@@ -13,4 +13,5 @@ struct cpu_vcpu_trap {
 
 int vcpu_emulate_mmio(vcpu_t *vcpu, struct cpu_user_regs *regs,
                       uint64_t fault_addr, int is_write);
+int vcpu_redirect_trap(struct cpu_user_regs *regs, struct cpu_vcpu_trap *trap);
 int inject_illegal_inst(struct cpu_user_regs *regs, uint64_t inst);

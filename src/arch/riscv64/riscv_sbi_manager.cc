@@ -211,7 +211,8 @@ void RiscvSbiManager::HandleVsEcall(struct cpu_user_regs *args) {
         args->a0 = SBI_SUCCESS;
         break;
     case SBI_EXT_0_1_SHUTDOWN:
-        panic("guest shutdown");
+        safe_printf("guest shutdown requested\n");
+        args->a0 = SBI_SUCCESS;
         break;
     case SBI_EXT_0_1_SET_TIMER:
         riscv_vcpu_timer_arm_current(args->a0);

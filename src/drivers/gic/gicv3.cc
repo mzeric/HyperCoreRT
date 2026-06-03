@@ -20,8 +20,8 @@ void init_gicv2(void *gicd_base, void *gicc_base) {
     *gicc_ctl |= 1;
 
 
-    writel(gicc_base + GICC_PMR, 0xff);
-    writel(gicd_base + GICD_ISENABLER, 0xffff0000);
+    writel((void *)((uintptr_t)gicc_base + GICC_PMR), 0xff);
+    writel((void *)((uintptr_t)gicd_base + GICD_ISENABLER), 0xffff0000);
 }
 
 int gicv3_init_el3(uintptr_t gicr_base) {
@@ -153,7 +153,7 @@ void gicv3_reenable_hyp_timer_ppi(void) {
 }
 
 void init_gicv3(void *gicd_base, void *gicc_base, void *gicr_base) {
-    (void)readl(gicd_base + GICD_CTLR);
+    (void)readl((void *)((uintptr_t)gicd_base + GICD_CTLR));
     if (current_el() == 2)
         enable_sre_el2();
 

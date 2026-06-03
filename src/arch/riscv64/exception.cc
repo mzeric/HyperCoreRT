@@ -19,6 +19,7 @@
 #include "riscv_features.h"
 #include "guest_dtb.h"
 #include "riscv_sbi_manager.h"
+#include "riscv_guest_fault_manager.h"
 #include "riscv_ipi.h"
 #include "riscv_timer_manager.h"
 #include "riscv_virt_irq_manager.h"
@@ -83,22 +84,10 @@ DO_ERROR_INFO(do_trap_ecall_u);
 DO_ERROR_INFO(do_trap_ecall_s);
 DO_ERROR_INFO(do_trap_break);
 // DO_ERROR_INFO(do_page_fault);
-int is_trap_from_guest(u64 hstatus) { return (hstatus & HSTATUS_SPV); }
 
 int do_page_fault(struct cpu_user_regs *regs, const char *str) {
     do_trap_error(regs, str);
     return 0;
-}
-
-static void handle_virt_instruction(struct cpu_user_regs *regs) {
-    u64 inst = csrr(CSR_STVAL);
-
-    if ((inst & INSN_MASK_WFI) == INSN_MATCH_WFI) {
-        regs->sepc += 4;
-        return;
-    }
-
-    do_trap_error(regs, "unhandled virtual instruction");
 }
 
 struct interrupt_info {
@@ -137,47 +126,6 @@ static inline const struct fault_info *ec_to_fault_info(unsigned int scause) {
     return fault_info + (scause & 0x1F);
 }
 
-void hfence(void);
-
-static vcpu_t *get_current_vcpu(void) {
-    hyper_task_t *task = current_task();
-    return task ? task->vcpu : NULL;
-}
-
-void do_stage2_fault(struct cpu_user_regs *regs, int cause) {
-    u64 htval = csrr(CSR_HTVAL);
-    u64 stval = csrr(CSR_STVAL);
-
-    u64 fault_addr = (htval << 2) | (stval & 3);
-    u64 fault_page = fault_addr & ~(PAGE_SIZE - 1);
-
-    int is_write = (cause == RISCV_EXCP_STORE_GUEST_AMO_ACCESS_FAULT);
-
-    vcpu_t *vcpu = get_current_vcpu();
-    if (!vcpu) {
-        safe_printf("stage2 fault: no vcpu, addr=%lx cause=%d\n", fault_addr, cause);
-        panic("stage2 fault without vcpu");
-    }
-
-    struct mem_region *region = guest_mem_find_region(vcpu, fault_addr, 0);
-    if (!region) {
-        safe_printf("stage2 fault: unmapped addr=%lx cause=%d\n", fault_addr, cause);
-        panic("stage2 fault: unknown guest address");
-    }
-
-    if (region->dev) {
-        /* MMIO device — emulate */
-        vcpu_emulate_mmio(vcpu, regs, fault_addr, is_write);
-    } else {
-        /* RAM — lazy stage-2 map */
-        u64 offset = fault_page - region->gpa;
-        u64 hpa = region->hpa + offset;
-        pg_map_stage2(fault_page, hpa, PAGE_SIZE, region->attr, 0);
-        if (!riscv_has_svvptc())
-            hfence();
-    }
-}
-
 static void handle_s_ext_irq(void) {
     u32 irq = plic_claim();
     if (irq == 0)
@@ -211,7 +159,7 @@ extern "C" void do_exception(struct cpu_user_regs *args, u64 cause) {
     const struct fault_info *inf;
     hyper_task_t *task = current_task();
 
-    if (task && task->mpidr == 0 && is_trap_from_guest(csrr(CSR_HSTATUS)))
+    if (task && task->mpidr == 0 && RiscvGuestFaultManager::is_guest_trap(csrr(CSR_HSTATUS)))
         riscv_mark_boot_vcpu_started();
 
     if (cause & (1ul << 63)) {
@@ -236,23 +184,12 @@ extern "C" void do_exception(struct cpu_user_regs *args, u64 cause) {
             break;
         }
     } else {
-        switch (cause) {
-        case RISCV_EXCP_VS_ECALL:
-            riscv_handle_vs_ecall(args);
-            break;
-        case RISCV_EXCP_INST_GUEST_PAGE_FAULT:
-        case RISCV_EXCP_LOAD_GUEST_ACCESS_FAULT:
-        case RISCV_EXCP_STORE_GUEST_AMO_ACCESS_FAULT:
-            do_stage2_fault(args, cause);
-            break;
-        case RISCV_EXCP_VIRT_INSTRUCTION_FAULT:
-            handle_virt_instruction(args);
-            break;
-        default:
-            inf = ec_to_fault_info(cause);
-            if (!inf->fn(args, inf->name))
-                do_trap_error(args, "");
-        }
+        if (RiscvGuestFaultManager::handle_exception(args, cause) == 0)
+            return;
+
+        inf = ec_to_fault_info(cause);
+        if (!inf->fn(args, inf->name))
+            do_trap_error(args, "");
     }
 }
 

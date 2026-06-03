@@ -15,7 +15,7 @@ struct emul_driver_ops {
 
 struct emul_driver {
     struct list_head   list;
-    char               *name;
+    const char         *name;
     struct emul_driver_ops *ops;
 };
 

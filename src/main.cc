@@ -34,16 +34,6 @@ int c_main(uintptr_t dtb_phys) {
         // asm volatile("wfi" ::: "memory");
 }
 
-#if defined(__aarch64__)
-
-#elif defined(__x86_64__)
-#warning "x86_64"
-#elif defined(__riscv)
-#warning "riscv"
-#else
-#warning "unknown arch"
-#endif
-
 extern "C" void _reset(uint64_t arg0, uint64_t arg1) {
 #if defined(__riscv)
     riscv_set_boot_hart_id((int)arg0);

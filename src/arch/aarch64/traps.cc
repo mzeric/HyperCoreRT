@@ -21,6 +21,7 @@
 #include "sys_reg.h"
 #include "smp.h"
 #include "ipi.h"
+#include "aarch64_guest_fault_manager.h"
 
 #include <stdio.h> /* just remove guest warning */
 #include <string.h>
@@ -29,13 +30,6 @@
 
 static void pl011_maybe_receive(void) {
     uart_emul_service_host();
-}
-
-static int is_uart_ipa(paddr_t ipa) {
-    struct hyper_config *cfg = hyper_config();
-
-    return cfg->uart.enabled && cfg->uart.guest_base <= ipa &&
-           ipa < cfg->uart.guest_base + cfg->uart.guest_size;
 }
 
 /*
@@ -144,13 +138,13 @@ extern "C" void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
         return;
     }
 
-    if(hirq_no == hyper_config()->timer.hyp_timer_ppi) {
+    if((u32)hirq_no == hyper_config()->timer.hyp_timer_ppi) {
         gicv3_reenable_hyp_timer_ppi();
         hyp_timer_rearm();
         sched_yield(regs);
         pl011_maybe_receive();
         gicv3_eof_int(hirq_no);
-    } else if(hirq_no == hyper_config()->timer.guest_virt_timer_ppi) {
+    } else if((u32)hirq_no == hyper_config()->timer.guest_virt_timer_ppi) {
         /* Virtual timer fired against the currently running guest vCPU. */
         u64 ctl = mrs(cntv_ctl_el0);
         msr(cntv_ctl_el0, ctl | (1u << 1));  /* IT_MASK = 1 */
@@ -162,7 +156,7 @@ extern "C" void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
         /* In case no switch happened we still need to flush LR for the cur task */
         if (current_task() == cur && cur)
             gic_vcpu_flush_lr(cur);
-    } else if(hyper_config()->uart.enabled && hirq_no == hyper_config()->uart.host_irq) {
+    } else if(hyper_config()->uart.enabled && (u32)hirq_no == hyper_config()->uart.host_irq) {
         pl011_maybe_receive();
         gicv3_eof_int(hirq_no);
     } else {
@@ -179,121 +173,7 @@ extern "C" void do_guest_irq(struct cpu_user_regs *regs) {
     return;
 }
 
-uint64_t get_gva() { return mrs(FAR_EL2); }
-
-paddr_t get_ipa() {
-    vaddr_t gva = mrs(FAR_EL2);
-    paddr_t hp = mrs(HPFAR_EL2);
-
-    paddr_t ipa = (paddr_t)(hp & HPFAR_MASK) << (12 - 4);
-    ipa |= gva & ~PAGE_MASK;
-
-    return ipa;
-}
-
-static int s2_map(vcpu_t *vcpu, const uint64_t ipa);
-
-int do_guest_inst_abort_trap(struct cpu_user_regs *regs, const union esr esr) {
-
-    vcpu_t *vcpu = current_task()->vcpu;
-    paddr_t ipa = get_ipa();
-    int fsc = esr.iabt.fsc;
-
-    if (fsc >= FSC_FLT_TRANS && fsc <= FSC_FLT_TRANS + 3) {
-        return s2_map(vcpu, ipa);
-    }
-
-    print_iss_detail(esr);
-    return 0;
-}
-
-
-int s2_map(vcpu_t *vcpu, const uint64_t ipa) {
-
-    struct mem_region *mem = guest_mem_find_region(vcpu, ipa, 0);
-    if (!mem) {
-        safe_printf("invalid ipa: %lx\n", ipa);
-        return -1;
-    }
-    size_t base = mem->gpa;
-
-    paddr_t ipa_aligned = ipa & ~(PAGE_SIZE - 1);
-
-    size_t  offset = (ipa_aligned - base);
-    paddr_t hpa_aligned = mem->hpa + offset;
-    stage2_map(&vcpu->mm_info, ipa_aligned, hpa_aligned, PAGE_SIZE, MEM_NORMAL_RW, mem->attr);
-
-    /* Invalidate stage-2 TLB for the IPA we just mapped (IS variant
-       broadcasts to all inner-shareable PEs for SMP correctness). */
-    tlb_inv_guest_ipa(ipa_aligned);
-
-    return 0;
-}
-
-int do_stage2_data_abort_trap(struct cpu_user_regs *regs, const union esr esr) {
-
-    paddr_t ipa = get_ipa();
-
-    int fsc = esr.dabt.fsc;
-    int d_reg = esr.dabt.reg;
-    int d_size = esr.dabt.size;
-    int ret = 0;
-
-
-    /* here stage2 mmap or emulate */
-
-    vcpu_t *vcpu = current_task()->vcpu;
-
-    switch (fsc) {
-    case FSC_FLT_TRANS ... FSC_FLT_TRANS + 3: {
-
-       ret = s2_map(vcpu, ipa);
-    } break;
-
-    case FSC_FLT_ACCESS ... FSC_FLT_ACCESS + 3: {
-        if (esr.dabt.write) {
-            vcpu_emulate_write(vcpu, regs, ipa, d_reg, d_size);
-        } else {
-            vcpu_emulate_read(vcpu, regs, ipa, d_reg, d_size);
-
-        }
-
-        regs->pc += 4;
-    } break;
-    }
-
-    if(ret) {
-        panic("do_data_abort failed\n");
-    }
-
-    return 0;
-}
-
-int do_guest_msr_mrs_trap(struct cpu_user_regs *regs, const union esr esr) {
-    uint64_t iss = esr.iss;
-    int reg_id = esr.sysreg.reg;
-    int size = esr.sysreg.len;
-    uint64_t data;
-    int ret = 0;
-    if (esr.sysreg.read) {
-        safe_printf("mrs trap: %d, size:%d\n", reg_id, size);
-        ret = vcpu_emulate_sysreg_read(regs, iss, &data);
-        vcpu_reg_write(regs, reg_id, size, data);
-
-
-    } else {
-        data = vcpu_reg_read(regs, reg_id, size);
-        ret = vcpu_emulate_sysreg_write(regs, iss, data);
-    }
-
-    regs->pc += 4;
-		// while(1);
-
-    return ret;
-}
-
 extern "C" void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
-    int ret = 0;
     if (is_compat == 1) {
         panic("Not support AArch32 Mode\n");
     }
@@ -308,38 +188,24 @@ extern "C" void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
     if (current_task())
         current_task()->trap_count++;
 
-    switch (esr.ec) {
-    case HSR_EC_SYSREG:
-        ret = do_guest_msr_mrs_trap(regs, esr);
-        if (!ret) {
-            gicv3_reenable_hyp_timer_ppi();
-            hyp_timer_rearm();
-            return;
-        }
-        break;
-    case HSR_EC_INSTR_ABORT_LOWER_EL:
-        ret = do_guest_inst_abort_trap(regs, esr);
-        if (!ret) return;   /* resolved – skip sched_yield */
-        break;
-    case HSR_EC_DATA_ABORT_LOWER_EL:
-        ret = do_stage2_data_abort_trap(regs, esr);
-        if (!ret) return;   /* resolved – skip sched_yield, return to guest */
-        break;
-    case HSR_EC_HVC64:
-        psci_vcpu_call(regs);
-        // sched_yield(regs);
-        break;
-    default: {
+    Aarch64GuestFaultResult result = Aarch64GuestFaultManager::handle_exception(regs, esr);
+    if (result.is_err()) {
         dump_vcpu_state("EXCEPTION");
-        hyper_info("[vCPU%d] unknown exception EC:0x%x", current_task()->id, esr.ec);
-        panic("");
-    }
-    }
-    if(ret) {
+        if (current_task()) {
+            hyper_info("[vCPU%d] guest exception EC:0x%x error=%u",
+                       current_task()->id, esr.ec,
+                       static_cast<unsigned int>(result.error()));
+        } else {
+            hyper_info("[no-task] guest exception EC:0x%x error=%u",
+                       esr.ec,
+                       static_cast<unsigned int>(result.error()));
+        }
         dump_vcpu_state("EXCEPTION-FAIL");
         panic("guest exception failed\n");
     }
-    sched_yield(regs);
+
+    if (result.action() == Aarch64GuestFaultAction::yield_scheduler)
+        sched_yield(regs);
 }
 
 extern "C" void do_hyper_sync(struct cpu_user_regs *regs, int magic) {

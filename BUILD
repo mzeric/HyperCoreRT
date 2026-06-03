@@ -75,7 +75,6 @@ cc_library(
         # "-fpic",
 
         "-fno-stack-protector",
-        "-Werror=implicit-function-declaration",
         # "-fno-builtin",
         "-fno-exceptions",
         "-fno-rtti",
@@ -107,8 +106,6 @@ cc_library(
     copts = [
         "-Wall",
         "-fno-exceptions",
-        "-fno-rtti",
-        "-fno-threadsafe-statics",
     ]+ select({
         "@platforms//cpu:riscv64":["-mcmodel=medany", "-march=rv64imac_zicsr", "-mabi=lp64"],
         "//conditions:default": []

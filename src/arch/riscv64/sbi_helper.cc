@@ -100,7 +100,7 @@ static int __sbi_rfence_v01(unsigned long fid,
 	return result;
 }
 
-static void __sbi_set_timer_v02(u64 stime_value)
+static __maybe_unused void __sbi_set_timer_v02(u64 stime_value)
 {
 	sbi_ecall(SBI_EXT_TIME, SBI_EXT_TIME_SET_TIMER, stime_value, 0,
 		  0, 0, 0, 0);
@@ -212,7 +212,7 @@ static long sbi_ext_base_func(long fid)
 		return ret.error;
 }
 
-static int __sbi_send_ipi_v02(const unsigned long *hart_mask)
+static __maybe_unused int __sbi_send_ipi_v02(const unsigned long *hart_mask)
 {
 	unsigned long hart, hmask, hbase;
 	int result;

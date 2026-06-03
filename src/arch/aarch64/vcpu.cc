@@ -91,7 +91,7 @@ static void vcpu_fpsimd_restore(vcpu_t *vcpu)
         : "memory");
 }
 
-struct mem_region *new_mem_regon(char *name, u64 gpa, u64 hpa, u64 size, int attr) {
+struct mem_region *new_mem_regon(const char *name, u64 gpa, u64 hpa, u64 size, int attr) {
     struct mem_region *region = (struct mem_region *)kmalloc(sizeof(struct mem_region));
     memset(region, 0, sizeof(struct mem_region));
     region->gpa = gpa;
@@ -99,8 +99,10 @@ struct mem_region *new_mem_regon(char *name, u64 gpa, u64 hpa, u64 size, int att
     region->size = size;
     region->attr = attr;
 
-    if (name)
-        memmove(region->match_name, name, strlen(name));
+    if (name) {
+        strncpy(region->match_name, name, sizeof(region->match_name) - 1);
+        region->match_name[sizeof(region->match_name) - 1] = '\0';
+    }
 
     probe_emul_dev(region);
 

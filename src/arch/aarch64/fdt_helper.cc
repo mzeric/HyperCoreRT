@@ -85,7 +85,7 @@ int fdt_get_reg_info(void *fdt, int node, uint64_t *addr, uint64_t *size) {
         hyper_err("reg <> not found");
         return -1;
     }
-    if (p && len < (na + ns) * sizeof(uint32_t)) {
+    if (p && len < (int)((na + ns) * sizeof(uint32_t))) {
         hyper_err("reg <> not enough");
         return -2;
     }
