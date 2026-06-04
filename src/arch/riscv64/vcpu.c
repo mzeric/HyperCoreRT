@@ -9,38 +9,6 @@
 #include "riscv_features.h"
 #include "guest_dtb.h"
 
-#define VCPU_STACK_SIZE (4096)
-
-static void arch_vcpu_reset(vcpu_t *vcpu) {
-    /* nothing yet */
-}
-
-vcpu_t *create_vcpu(int vcpu_id, int priority) {
-    vcpu_t *vcpu = (vcpu_t *)kmalloc(sizeof(vcpu_t));
-    if (!vcpu) {
-        return NULL;
-    }
-
-    memset(vcpu, 0, sizeof(vcpu_t));
-    INIT_LIST_HEAD(&vcpu->list);
-    INIT_SPIN_LOCK(vcpu->carch.virt_irq_lock);
-    vcpu->vcpu_id = vcpu_id;
-    vcpu->priority = priority;
-
-    vcpu->arch.stack = (uint64_t)((char *)kmalloc(VCPU_STACK_SIZE) + VCPU_STACK_SIZE);
-    arch_vcpu_reset(vcpu);
-
-    return vcpu;
-}
-
-void destroy_vcpu(vcpu_t *vcpu) {
-    if (vcpu->arch.stack)
-        kfree((void *)(vcpu->arch.stack - VCPU_STACK_SIZE));
-    if (vcpu->carch.vregs)
-        kfree(vcpu->carch.vregs);
-    kfree(vcpu);
-}
-
 #define HSTATUS_VS (HSTATUS_SPV | HSTATUS_SPVP)
 #define HSTATUS_VCPU_MASK HSTATUS_VS
 

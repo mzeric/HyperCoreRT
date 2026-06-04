@@ -22,7 +22,6 @@ DEFINE_PER_CPU(hyper_task_t *, current_task);
 /* Global running-task snapshot, updated by set_current(). */
 hyper_task_t *g_running[CONFIG_SMP_CPU_NUM];
 
-static size_t               g_task_id = 1;
 // static spinlock_t           g_task_lock;
 static struct cpu_user_regs g_empty_regs;
 
@@ -60,143 +59,37 @@ int init_sched() {
     return 0;
 }
 
-int init_task_regs(hyper_task_t *task, void *entry, uintptr_t stack) {
-#if 0
-    task->regs.sp = (uintptr_t)kmalloc(4096) + 4096;
-    task->regs.pc = (uintptr_t)entry;
-    task->regs.lr = (uintptr_t)sink_task;
-    task->regs.cpsr = PSR_MODE64_EL2h;
-#else
-
-#ifdef EL2_TASK
-    task->vcpu->regs.sp = stack;// sp_el2
-#else
-    task->vcpu->arch.stack = (void *)stack; // sp_el1;
-#endif
-
-#if 0
-    task->vcpu->regs.pc = (uintptr_t)entry;
-    task->vcpu->regs.lr = (uintptr_t)sink_task;
-    task->vcpu->regs.cpsr = 0x3c5;
-#else
-    arch_set_return_addr(&task->vcpu->regs, (uintptr_t)sink_task);
-    arch_set_pc(&task->vcpu->regs, (uintptr_t)entry);
-
-    vcpu_reg_write(&task->vcpu->regs, 0, 0, hyper_config()->guest.dtb_addr);
-
-    arch_set_task_status(&task->vcpu->regs, 0x3c5);
-
-#endif
-
-#endif
-
-
-    return 0;
-}
-    extern void *_guest_stack_end;
-
 int create_task(const char *name, void *entry, int priority) {
-    hyper_task_t *task;
-
-    task = (hyper_task_t *)kmalloc(sizeof(hyper_task_t));
-
-    memset(task, 0, sizeof(hyper_task_t));
-    INIT_LIST_HEAD(&task->list);
-    task->virq_lock = (spinlock_t){ .lock = SPIN_UNLOCKED };
-
-    hyper_debug("create vcpu:%p", task->vcpu);
-
-    task->priority = priority;
-    task->id = g_task_id++;
-    task->state = TASK_READY;
-    task->pcpu_affinity = 0;   /* vCPU0 pinned to pCPU0 */
     u64 boot_mpidr = hyper_config()->guest.vcpu_mpidr[0] & 0xff00ffffffULL;
-    task->mpidr = boot_mpidr;
-    task->vcpu = create_vcpu(1, 0);
-    if (task->vcpu)
-        task->vcpu->arch.vmpidr = 0x80000000ULL | boot_mpidr;
-    if (task->vcpu == NULL) {
-        hyper_err("create vcpu failed");
-        return -1;
-    }
-    uintptr_t stack_ptr = (uintptr_t)kmalloc(4096) + 4096;
-    hyper_info("init task stack:%p", (void *)stack_ptr);
-    arch_vcpu_init(task->vcpu, (uintptr_t)entry, stack_ptr);
-    init_task_regs(task, entry, stack_ptr);
-    if (name)
-        memcpy(task->name, name, sizeof(task->name) < strlen(name) ? sizeof(task->name) : strlen(name));
+    struct vm_vcpu_task_desc desc = {
+        .name = name,
+        .vcpu_id = 1,
+        .priority = priority,
+        .vcpu_priority = 0,
+        .pcpu_affinity = 0,
+        .entry = (uintptr_t)entry,
+        .arg0 = hyper_config()->guest.dtb_addr,
+        .guest_cpu_id = boot_mpidr,
+        .flags = VM_VCPU_TASK_F_ARG0_VALID,
+    };
 
-    hyper_info("init done");
-    simple_scheduler_sched(task);
-
-    return 0;
+    return vm_create_vcpu_task(&desc);
 }
 
 //For smp
-int init_task_regs2(hyper_task_t *task, void *entry, uintptr_t stack) {
-#if 0
-    task->regs.sp = (uintptr_t)kmalloc(4096) + 4096;
-    task->regs.pc = (uintptr_t)entry;
-    task->regs.lr = (uintptr_t)sink_task;
-    task->regs.cpsr = PSR_MODE64_EL2h;
-#else
-
-#ifdef EL2_TASK
-    task->vcpu->regs.sp = stack;// sp_el2
-#else
-    task->vcpu->arch.stack = (void *)stack; // sp_el1;
-#endif
-
-#if 0
-    task->vcpu->regs.pc = (uintptr_t)entry;
-    task->vcpu->regs.lr = (uintptr_t)sink_task;
-    task->vcpu->regs.cpsr = 0x3c5;
-#else
-    arch_set_return_addr(&task->vcpu->regs, (uintptr_t)sink_task);
-    arch_set_pc(&task->vcpu->regs, (uintptr_t)entry);
-
-    arch_set_task_status(&task->vcpu->regs, 0x3c5);
-
-#endif
-
-#endif
-
-
-    return 0;
-}
-
 int create_task2(const char *name, void *entry, int priority) {
-    hyper_task_t *task;
-
-    task = (hyper_task_t *)kmalloc(sizeof(hyper_task_t));
-
-    memset(task, 0, sizeof(hyper_task_t));
-    INIT_LIST_HEAD(&task->list);
-    task->virq_lock = (spinlock_t){ .lock = SPIN_UNLOCKED };
-
-    hyper_debug("create vcpu:%p", task->vcpu);
-
-    task->priority = priority;
-    task->id = g_task_id++;
-    task->state = TASK_READY;
     /* mpidr is patched in by psci_vcpu_on right after create_task2 returns */
-    task->mpidr = (uint64_t)-1;
-    task->vcpu = create_vcpu(1, 0);
-    if (task->vcpu == NULL) {
-        hyper_err("create vcpu failed");
-        return -1;
-    }
-    uintptr_t stack_ptr = (uintptr_t)kmalloc(4096) + 4096;
-    hyper_info("init task stack:%p", (void *)stack_ptr);
-    arch_vcpu_init(task->vcpu, (uintptr_t)entry, stack_ptr);
-    init_task_regs2(task, entry, stack_ptr);
-    if (name)
-        memcpy(task->name, name, sizeof(task->name) < strlen(name) ? sizeof(task->name) : strlen(name));
+    struct vm_vcpu_task_desc desc = {
+        .name = name,
+        .vcpu_id = 1,
+        .priority = priority,
+        .vcpu_priority = 0,
+        .pcpu_affinity = 0,
+        .entry = (uintptr_t)entry,
+        .guest_cpu_id = (uint64_t)-1,
+    };
 
-    hyper_info("init done");
-    simple_scheduler_sched(task);
-
-    return 0;
+    return vm_create_vcpu_task(&desc);
 }
 
 static void mTaskEntry(void)
@@ -213,37 +106,19 @@ static void mTaskEntry(void)
 }
 
 int create_task3(const char *name, void *__entry, int priority) {
-    hyper_task_t *task;
-
     void *entry = (void *)&mTaskEntry;
+    struct vm_vcpu_task_desc desc = {
+        .name = name,
+        .vcpu_id = 1,
+        .priority = priority,
+        .vcpu_priority = 0,
+        .pcpu_affinity = 0,
+        .entry = (uintptr_t)entry,
+        .guest_cpu_id = (uint64_t)-1,
+    };
 
-    task = (hyper_task_t *)kmalloc(sizeof(hyper_task_t));
-
-    memset(task, 0, sizeof(hyper_task_t));
-    INIT_LIST_HEAD(&task->list);
-    task->virq_lock = (spinlock_t){ .lock = SPIN_UNLOCKED };
-
-    hyper_debug("create vcpu:%p", task->vcpu);
-
-    task->priority = priority;
-    task->id = g_task_id++;
-    task->state = TASK_READY;
-    task->vcpu = create_vcpu(1, 0);
-    if (task->vcpu == NULL) {
-        hyper_err("create vcpu failed");
-        return -1;
-    }
-    uintptr_t stack_ptr = (uintptr_t)kmalloc(4096) + 4096;
-    hyper_info("init task stack:%p", (void *)stack_ptr);
-    arch_vcpu_init(task->vcpu, (uintptr_t)entry, stack_ptr);
-    init_task_regs2(task, entry, stack_ptr);
-    if (name)
-        memcpy(task->name, name, sizeof(task->name) < strlen(name) ? sizeof(task->name) : strlen(name));
-
-    hyper_info("init done");
-    simple_scheduler_sched(task);
-
-    return 0;
+    (void)__entry;
+    return vm_create_vcpu_task(&desc);
 }
 
 void __dump_task(struct list_head *list) {

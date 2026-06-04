@@ -165,41 +165,6 @@ int arch_vcpu_reset(vcpu_t *vcpu) {
     return rc;
 }
 
-void destroy_vcpu(vcpu_t *vcpu) {
-    if(vcpu->arch.saved_context.sp)
-        kfree((void *)vcpu->arch.saved_context.sp);
-
-
-    kfree(vcpu);
-}
-
-#define VCPU_STACK_SIZE (4096)
-vcpu_t *create_vcpu(int vcpu_d, int priority) {
-
-    vcpu_t *vcpu = NULL;
-
-    if(!(vcpu = (vcpu_t *)kmalloc(sizeof(vcpu_t)))){
-        hyper_fatal("alloc vcpu struct failed");
-        return NULL;
-    }
-
-    memset(vcpu, 0, sizeof(vcpu_t));
-
-    INIT_LIST_HEAD(&vcpu->list);
-
-    vcpu->priority = priority;
-
-    /* read-write lock here */
-
-    /* need tasklet here */
-
-    vcpu->arch.stack = (char *)kmalloc(VCPU_STACK_SIZE) + VCPU_STACK_SIZE;
-    //vcpu->arch.saved_context.sp =
-    arch_vcpu_reset(vcpu);
-
-    return vcpu;
-}
-
 void vcpu_context_save(vcpu_t *vcpu) {
 
     vcpu->arch.csselr = mrs(CSSELR_EL1);
