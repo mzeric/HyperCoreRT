@@ -9,7 +9,7 @@
 #define FDT_NOP        0x4u
 #define FDT_END        0x9u
 
-struct fdt_header_min {
+typedef struct fdt_header_min {
     u32 magic;
     u32 totalsize;
     u32 off_dt_struct;
@@ -20,7 +20,7 @@ struct fdt_header_min {
     u32 boot_cpuid_phys;
     u32 size_dt_strings;
     u32 size_dt_struct;
-};
+} fdt_header_min;
 
 static bool g_has_svvptc;
 static bool g_has_fpu;

@@ -26,10 +26,10 @@ static bool guest_hart_selected(u32 hart, u64 hart_mask, u64 hart_base) {
     return hart_mask & (1UL << bit);
 }
 
-long RiscvFenceManager::RemoteFence(RiscvFenceKind kind, u64 hart_mask, u64 hart_base) {
+long riscv_remote_fence(enum riscv_fence_kind kind, u64 hart_mask, u64 hart_base) {
     (void)kind;
 
-    bool selected_pcpu[CONFIG_SMP_CPU_NUM] = {};
+    bool selected_pcpu[CONFIG_SMP_CPU_NUM] = {0};
     for (u32 hart = 0; hart < riscv_guest_vcpu_count(); hart++) {
         if (!guest_hart_selected(hart, hart_mask, hart_base))
             continue;

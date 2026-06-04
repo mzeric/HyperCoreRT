@@ -5,14 +5,12 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "pl011",
     srcs = glob([
-        "pl011/*.cc",
+        "pl011/*.c",
     ]),
     hdrs = glob(["pl011/**/*.h"]),
     copts = [
         "-Wall",
-        "-fno-exceptions",
-        "-fno-rtti",
-        "-fno-threadsafe-statics",
+        "-std=gnu11",
     ] + select({
         "@platforms//cpu:riscv64": ["-march=rv64imac_zicsr", "-mabi=lp64"],
         "//conditions:default": [],
@@ -27,15 +25,13 @@ cc_library(
 cc_library(
     name = "gic",
     srcs = glob([
-        "gic/*.cc",
+        "gic/*.c",
     ]),
     hdrs = glob(["gic/*.h"]),
     includes = ["//:include/"],
     copts = [
         "-Wall",
-        "-fno-exceptions",
-        "-fno-rtti",
-        "-fno-threadsafe-statics",
+        "-std=gnu11",
     ] + select({
         "@platforms//cpu:riscv64": ["-march=rv64imac_zicsr", "-mabi=lp64"],
         "//conditions:default": [],

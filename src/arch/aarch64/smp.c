@@ -136,7 +136,7 @@ static int parse_host_cpus(void *fdt)
 
 extern void gic_vcpu_init_pcpu(void);
 
-extern "C" void secondary_start(void)
+void secondary_start(void)
 {
     int cpu = smp_current_cpu_id();
     uint64_t mpidr = smp_id();

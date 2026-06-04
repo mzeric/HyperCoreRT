@@ -155,11 +155,11 @@ static void handle_s_soft_irq(void) {
     riscv_virt_irq_materialize_current();
 }
 
-extern "C" void do_exception(struct cpu_user_regs *args, u64 cause) {
+void do_exception(struct cpu_user_regs *args, u64 cause) {
     const struct fault_info *inf;
     hyper_task_t *task = current_task();
 
-    if (task && task->mpidr == 0 && RiscvGuestFaultManager::is_guest_trap(csrr(CSR_HSTATUS)))
+    if (task && task->mpidr == 0 && riscv_guest_fault_is_guest_trap(csrr(CSR_HSTATUS)))
         riscv_mark_boot_vcpu_started();
 
     if (cause & (1ul << 63)) {
@@ -184,7 +184,7 @@ extern "C" void do_exception(struct cpu_user_regs *args, u64 cause) {
             break;
         }
     } else {
-        if (RiscvGuestFaultManager::handle_exception(args, cause) == 0)
+        if (riscv_guest_fault_handle_exception(args, cause) == 0)
             return;
 
         inf = ec_to_fault_info(cause);

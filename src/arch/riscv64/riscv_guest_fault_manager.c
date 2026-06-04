@@ -15,7 +15,7 @@
 
 void hfence(void);
 
-bool RiscvGuestFaultManager::is_guest_trap(u64 hstatus) {
+bool riscv_guest_fault_is_guest_trap(u64 hstatus) {
     return (hstatus & HSTATUS_SPV) != 0;
 }
 
@@ -40,9 +40,8 @@ static u64 guest_page_fault_cause(u64 cause) {
     }
 }
 
-int RiscvGuestFaultManager::redirect_guest_exception(struct cpu_user_regs *regs,
-                                                     u64 scause, u64 stval) {
-    struct cpu_vcpu_trap trap = {};
+static int redirect_guest_exception(struct cpu_user_regs *regs, u64 scause, u64 stval) {
+    struct cpu_vcpu_trap trap = {0};
     trap.sepc = regs->sepc;
     trap.scause = scause;
     trap.stval = stval;
@@ -52,7 +51,7 @@ int RiscvGuestFaultManager::redirect_guest_exception(struct cpu_user_regs *regs,
     return 0;
 }
 
-int RiscvGuestFaultManager::handle_stage2_fault(struct cpu_user_regs *regs, u64 cause) {
+static int handle_stage2_fault(struct cpu_user_regs *regs, u64 cause) {
     u64 htval = csrr(CSR_HTVAL);
     u64 stval = csrr(CSR_STVAL);
     u64 fault_addr = stage2_fault_addr(htval, stval);
@@ -93,7 +92,7 @@ int RiscvGuestFaultManager::handle_stage2_fault(struct cpu_user_regs *regs, u64 
     return 0;
 }
 
-int RiscvGuestFaultManager::handle_virtual_instruction(struct cpu_user_regs *regs) {
+static int handle_virtual_instruction(struct cpu_user_regs *regs) {
     u64 inst = csrr(CSR_STVAL);
 
     if ((inst & INSN_MASK_WFI) == INSN_MATCH_WFI) {
@@ -105,10 +104,10 @@ int RiscvGuestFaultManager::handle_virtual_instruction(struct cpu_user_regs *reg
     return redirect_guest_exception(regs, RISCV_EXCP_ILLEGAL_INST, inst);
 }
 
-int RiscvGuestFaultManager::handle_exception(struct cpu_user_regs *regs, u64 cause) {
+int riscv_guest_fault_handle_exception(struct cpu_user_regs *regs, u64 cause) {
     switch (cause) {
     case RISCV_EXCP_VS_ECALL:
-        RiscvSbiManager::HandleVsEcall(regs);
+        riscv_sbi_handle_vs_ecall(regs);
         return 0;
     case RISCV_EXCP_INST_GUEST_PAGE_FAULT:
     case RISCV_EXCP_LOAD_GUEST_ACCESS_FAULT:
@@ -117,7 +116,7 @@ int RiscvGuestFaultManager::handle_exception(struct cpu_user_regs *regs, u64 cau
     case RISCV_EXCP_VIRT_INSTRUCTION_FAULT:
         return handle_virtual_instruction(regs);
     default:
-        if (is_guest_trap(csrr(CSR_HSTATUS)))
+        if (riscv_guest_fault_is_guest_trap(csrr(CSR_HSTATUS)))
             return redirect_guest_exception(regs, cause, csrr(CSR_STVAL));
         return -1;
     }

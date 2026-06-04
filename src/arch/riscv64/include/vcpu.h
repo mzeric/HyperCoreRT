@@ -10,11 +10,11 @@ struct arch_vcpu {
     uint64_t vmpidr;   /* only for aarch64 compat, unused on riscv */
 };
 
-struct riscv_vcpu_timer_state {
+typedef struct riscv_vcpu_timer_state {
     uint64_t deadline_cycles;
     uint8_t armed;
     uint8_t pending;
-};
+} riscv_vcpu_timer_state;
 
 struct cpu_arch {
     uint64_t hstatus;

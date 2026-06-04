@@ -135,7 +135,7 @@ static void handle_sbi_send_ipi(struct cpu_user_regs *args) {
     args->a1 = 0;
 }
 
-static long handle_legacy_remote_fence(struct cpu_user_regs *args, RiscvFenceKind kind) {
+static long handle_legacy_remote_fence(struct cpu_user_regs *args, enum riscv_fence_kind kind) {
     u64 mask;
     if (args->a0 == 0) {
         mask = (riscv_guest_vcpu_count() >= 64) ? ~0UL : ((1UL << riscv_guest_vcpu_count()) - 1);
@@ -144,34 +144,34 @@ static long handle_legacy_remote_fence(struct cpu_user_regs *args, RiscvFenceKin
         return SBI_ERR_INVALID_ADDRESS;
     }
 
-    return RiscvFenceManager::RemoteFence(kind, mask, 0);
+    return riscv_remote_fence(kind, mask, 0);
 }
 
-static bool rfence_kind_from_fid(u64 fid, RiscvFenceKind *kind) {
+static bool rfence_kind_from_fid(u64 fid, enum riscv_fence_kind *kind) {
     switch (fid) {
     case SBI_EXT_RFENCE_REMOTE_FENCE_I:
-        *kind = RiscvFenceKind::RemoteFenceI;
+        *kind = RISCV_FENCE_REMOTE_FENCE_I;
         return true;
     case SBI_EXT_RFENCE_REMOTE_HFENCE_GVMA:
-        *kind = RiscvFenceKind::RemoteHfenceGvma;
+        *kind = RISCV_FENCE_REMOTE_HFENCE_GVMA;
         return true;
     case SBI_EXT_RFENCE_REMOTE_HFENCE_GVMA_VMID:
-        *kind = RiscvFenceKind::RemoteHfenceGvmaVmid;
+        *kind = RISCV_FENCE_REMOTE_HFENCE_GVMA_VMID;
         return true;
     case SBI_EXT_RFENCE_REMOTE_HFENCE_VVMA_ASID:
     case SBI_EXT_RFENCE_REMOTE_SFENCE_VMA_ASID:
-        *kind = RiscvFenceKind::RemoteHfenceVvmaAsid;
+        *kind = RISCV_FENCE_REMOTE_HFENCE_VVMA_ASID;
         return true;
     case SBI_EXT_RFENCE_REMOTE_HFENCE_VVMA:
     case SBI_EXT_RFENCE_REMOTE_SFENCE_VMA:
-        *kind = RiscvFenceKind::RemoteHfenceVvma;
+        *kind = RISCV_FENCE_REMOTE_HFENCE_VVMA;
         return true;
     default:
         return false;
     }
 }
 
-bool RiscvSbiManager::IsExtensionSupported(u64 extension_id) {
+bool riscv_sbi_extension_supported(u64 extension_id) {
     switch (extension_id) {
     case SBI_EXT_BASE:
     case SBI_EXT_TIME:
@@ -184,13 +184,17 @@ bool RiscvSbiManager::IsExtensionSupported(u64 extension_id) {
     }
 }
 
-RiscvSbiResult RiscvSbiManager::NotSupported(void) {
-    return {SBI_ERR_NOT_SUPPORTED, 0};
+struct RiscvSbiResult riscv_sbi_not_supported(void) {
+    struct RiscvSbiResult result = {
+        .error = SBI_ERR_NOT_SUPPORTED,
+        .value = 0,
+    };
+    return result;
 }
 
 static void handle_base_extension(struct cpu_user_regs *args, u64 fid) {
     if (fid == SBI_EXT_BASE_PROBE_EXT) {
-        args->a1 = RiscvSbiManager::IsExtensionSupported(args->a0) ? 1 : 0;
+        args->a1 = riscv_sbi_extension_supported(args->a0) ? 1 : 0;
         args->a0 = SBI_SUCCESS;
         return;
     }
@@ -201,7 +205,7 @@ static void handle_base_extension(struct cpu_user_regs *args, u64 fid) {
     args->a1 = (u64)ret.value;
 }
 
-void RiscvSbiManager::HandleVsEcall(struct cpu_user_regs *args) {
+void riscv_sbi_handle_vs_ecall(struct cpu_user_regs *args) {
     u64 ext = args->a7;
     u64 fid = args->a6;
 
@@ -226,13 +230,13 @@ void RiscvSbiManager::HandleVsEcall(struct cpu_user_regs *args) {
         handle_legacy_send_ipi(args);
         break;
     case SBI_EXT_0_1_REMOTE_FENCE_I:
-        args->a0 = handle_legacy_remote_fence(args, RiscvFenceKind::RemoteFenceI);
+        args->a0 = handle_legacy_remote_fence(args, RISCV_FENCE_REMOTE_FENCE_I);
         break;
     case SBI_EXT_0_1_REMOTE_SFENCE_VMA:
-        args->a0 = handle_legacy_remote_fence(args, RiscvFenceKind::RemoteHfenceVvma);
+        args->a0 = handle_legacy_remote_fence(args, RISCV_FENCE_REMOTE_HFENCE_VVMA);
         break;
     case SBI_EXT_0_1_REMOTE_SFENCE_VMA_ASID:
-        args->a0 = handle_legacy_remote_fence(args, RiscvFenceKind::RemoteHfenceVvmaAsid);
+        args->a0 = handle_legacy_remote_fence(args, RISCV_FENCE_REMOTE_HFENCE_VVMA_ASID);
         break;
     case SBI_EXT_BASE:
         handle_base_extension(args, fid);
@@ -247,13 +251,13 @@ void RiscvSbiManager::HandleVsEcall(struct cpu_user_regs *args) {
         break;
     case SBI_EXT_RFENCE:
     {
-        RiscvFenceKind kind;
+        enum riscv_fence_kind kind;
         if (!rfence_kind_from_fid(fid, &kind)) {
             args->a0 = (u64)SBI_ERR_NOT_SUPPORTED;
             args->a1 = 0;
             break;
         }
-        args->a0 = (u64)RiscvFenceManager::RemoteFence(kind, args->a0, args->a1);
+        args->a0 = (u64)riscv_remote_fence(kind, args->a0, args->a1);
         args->a1 = 0;
         break;
     }
@@ -281,5 +285,5 @@ void RiscvSbiManager::HandleVsEcall(struct cpu_user_regs *args) {
 }
 
 void riscv_handle_vs_ecall(struct cpu_user_regs *args) {
-    RiscvSbiManager::HandleVsEcall(args);
+    riscv_sbi_handle_vs_ecall(args);
 }

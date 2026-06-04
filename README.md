@@ -59,8 +59,8 @@ Makefile uses the local toolchain prefix from `CROSS_COMPILE=/path/to/prefix-`. 
 
 #### Prerequisites
 
-- AArch64: `aarch64-none-elf-gcc/g++/objcopy` or a compatible bare-metal/newlib cross toolchain
-- RISC-V: `riscv-none-elf-gcc/g++/objcopy` or a compatible bare-metal/newlib cross toolchain
+- AArch64: `aarch64-none-elf-gcc/objcopy` or a compatible bare-metal/newlib cross toolchain
+- RISC-V: `riscv-none-elf-gcc/objcopy` or a compatible bare-metal/newlib cross toolchain
 - `dtc` (device tree compiler)
 - `make`
 
@@ -99,7 +99,7 @@ make TARGET=aarch64 CROSS_COMPILE=aarch64-linux-gnu-
 
 The default `*-none-elf` bare-metal/newlib toolchains are used because the hypervisor runs in a bare-metal environment while still relying on libc/newlib symbols such as `printf`, `memset`, `memmove`, `memcmp`, `strlen`, and `strnlen`. Linux glibc toolchains such as `riscv64-linux-gnu-` are usually not suitable for the current `rv64imac/lp64` bare-metal configuration.
 
-Makefile uses `-std=gnu++17`. The codebase follows C++17, but the current low-level code also uses GNU extensions such as `typeof` and statement expressions.
+Makefile uses `-std=gnu11`. The codebase has moved back to C, while the current low-level code still uses GNU extensions such as `typeof` and statement expressions.
 
 | File | Description |
 |------|-------------|

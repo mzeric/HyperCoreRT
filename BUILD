@@ -53,22 +53,23 @@ cc_library(
     srcs = select({
         "@platforms//cpu:aarch64": glob(
             [
-                "src/arch/aarch64/**/*.cc",
+                "src/arch/aarch64/**/*.c",
                 "src/arch/aarch64/**/*.h",
             ],
         ),
         "@platforms//cpu:riscv64": glob(
             [
-                "src/arch/riscv64/**/*.cc",
+                "src/arch/riscv64/**/*.c",
                 "src/arch/riscv64/**/*.h",
             ],
-            exclude = ["src/arch/riscv64/sched_riscv.cc"],
+            exclude = ["src/arch/riscv64/sched_riscv.c"],
         ),
     }),
     hdrs = glob(["include/**/*.h"]),
     copts = [
         "-Wall",
         "-g",
+        "-std=gnu11",
         # "-Werror",
         # "-ffreestanding",
         # "-march=armv8-a",
@@ -76,9 +77,6 @@ cc_library(
 
         "-fno-stack-protector",
         # "-fno-builtin",
-        "-fno-exceptions",
-        "-fno-rtti",
-        "-fno-threadsafe-statics",
         ] + select({
             "@platforms//cpu:riscv64":["-mcmodel=medany", "-march=rv64imac_zicsr", "-mabi=lp64"],
             "//conditions:default": [],
@@ -102,10 +100,10 @@ cc_library(
 
 cc_library(
     name = "utils",
-    srcs = glob(["src/utils/**/*.c", "src/utils/**/*.cc"]),
+    srcs = glob(["src/utils/**/*.c"]),
     copts = [
         "-Wall",
-        "-fno-exceptions",
+        "-std=gnu11",
     ]+ select({
         "@platforms//cpu:riscv64":["-mcmodel=medany", "-march=rv64imac_zicsr", "-mabi=lp64"],
         "//conditions:default": []
@@ -123,66 +121,39 @@ cc_library(
 )
 
 cc_library(
-    name = "cxx-runtime",
-    srcs = glob(["src/cxx_core/**/*.cc"]),
-    hdrs = glob(["include/**/*.h"]),
-    copts = [
-        "-Wall",
-        "-Wextra",
-        "-Wno-unused-parameter",
-        "-ffreestanding",
-        "-fno-stack-protector",
-        "-fno-builtin",
-        "-fno-exceptions",
-        "-fno-rtti",
-        "-fno-threadsafe-statics",
-        "-O0",
-        "-g",
-    ] + select({
-        "@platforms//cpu:riscv64": ["-mcmodel=medany", "-march=rv64imac_zicsr", "-mabi=lp64"],
-        "//conditions:default": [],
-    }),
-    includes = ["include/"],
-    deps = [":start_head"],
-    alwayslink = True,
-)
-
-cc_library(
     name = "hyper-core",
     srcs = glob(
-        ["src/core/**/*.cc",
+        ["src/core/**/*.c",
         "src/core/**/*.h"],
         exclude = [
-            "src/core/emul_gic.cc",
-            "src/core/emul_gicv3.cc",
-            "src/core/emul_uart.cc",
-            "src/core/emul_dev.cc",
-            "src/core/emul_psci.cc",
-            "src/core/sched.cc",
+            "src/core/emul_gic.c",
+            "src/core/emul_gicv3.c",
+            "src/core/emul_uart.c",
+            "src/core/emul_dev.c",
+            "src/core/emul_psci.c",
+            "src/core/sched.c",
         ],
     ) + select({
         "@platforms//cpu:aarch64": [
-            "src/core/emul_gic.cc",
-            "src/core/emul_gicv3.cc",
-            "src/core/emul_uart.cc",
-            "src/core/emul_dev.cc",
-            "src/core/emul_psci.cc",
-            "src/core/sched.cc",
+            "src/core/emul_gic.c",
+            "src/core/emul_gicv3.c",
+            "src/core/emul_uart.c",
+            "src/core/emul_dev.c",
+            "src/core/emul_psci.c",
+            "src/core/sched.c",
         ],
         "@platforms//cpu:riscv64": [
-            "src/core/emul_dev.cc",
-            "src/arch/riscv64/sched_riscv.cc",
+            "src/core/emul_dev.c",
+            "src/arch/riscv64/sched_riscv.c",
         ],
-    }) + ["src/main.cc"],
+    }) + ["src/main.c"],
     hdrs = glob(["include/**/*.h"]),
     copts = [
         "-Wall",
+        "-std=gnu11",
         "-ffreestanding",
         "-fno-stack-protector",
         "-fno-builtin",
-        "-fno-exceptions",
-        "-fno-rtti",
-        "-fno-threadsafe-statics",
         "-O0",
         "-g",
     ] + select({
@@ -194,7 +165,6 @@ cc_library(
     ],
     deps = [
         ":start_head",
-        ":cxx-runtime",
     ],
     alwayslink = True,
 )

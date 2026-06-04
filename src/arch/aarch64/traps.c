@@ -62,7 +62,7 @@ void destroy_task(hyper_task_t *task) {
         kfree((void *)task->regs.sp);
 }
 
-extern "C" void do_bad_mode(struct cpu_user_regs *regs, int is_compat) {
+void do_bad_mode(struct cpu_user_regs *regs, int is_compat) {
 
     hyper_debug("sysr: 0x%lx %d", regs->cpsr, is_compat);
     hyper_debug("el:%lx", mrs(CurrentEL));
@@ -124,7 +124,7 @@ void irq_delay(int v) {
     while(get_cycles() < start + v);
 }
 
-extern "C" void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
+void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
     int hirq_no;
     hirq_no = mrs(ICC_IAR1_EL1);
     if (current_task())
@@ -168,12 +168,12 @@ extern "C" void do_irq_mode(struct cpu_user_regs *regs, int is_compat) {
     }
 }
 /* irq interrupt EL1 */
-extern "C" void do_guest_irq(struct cpu_user_regs *regs) {
+void do_guest_irq(struct cpu_user_regs *regs) {
     do_irq_mode(regs, 0);
     return;
 }
 
-extern "C" void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
+void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
     if (is_compat == 1) {
         panic("Not support AArch32 Mode\n");
     }
@@ -188,27 +188,28 @@ extern "C" void do_guest_exception(struct cpu_user_regs *regs, int is_compat) {
     if (current_task())
         current_task()->trap_count++;
 
-    Aarch64GuestFaultResult result = Aarch64GuestFaultManager::handle_exception(regs, esr);
-    if (result.is_err()) {
+    struct aarch64_guest_fault_result result =
+        aarch64_guest_fault_handle_exception(regs, &esr);
+    if (!result.ok) {
         dump_vcpu_state("EXCEPTION");
         if (current_task()) {
             hyper_info("[vCPU%d] guest exception EC:0x%x error=%u",
                        current_task()->id, esr.ec,
-                       static_cast<unsigned int>(result.error()));
+                       (unsigned int)result.error);
         } else {
             hyper_info("[no-task] guest exception EC:0x%x error=%u",
                        esr.ec,
-                       static_cast<unsigned int>(result.error()));
+                       (unsigned int)result.error);
         }
         dump_vcpu_state("EXCEPTION-FAIL");
         panic("guest exception failed\n");
     }
 
-    if (result.action() == Aarch64GuestFaultAction::yield_scheduler)
+    if (result.action == AARCH64_GUEST_FAULT_YIELD_SCHEDULER)
         sched_yield(regs);
 }
 
-extern "C" void do_hyper_sync(struct cpu_user_regs *regs, int magic) {
+void do_hyper_sync(struct cpu_user_regs *regs, int magic) {
     uint64_t esr = mrs(esr_el2);
     uint64_t far = mrs(far_el2);
     uint64_t elr = mrs(elr_el2);
@@ -231,7 +232,7 @@ extern "C" void do_hyper_sync(struct cpu_user_regs *regs, int magic) {
     panic("hyper_sync");
 }
 
-extern "C" void on_guest_excep_return(void ){
+void on_guest_excep_return(void ){
 
 }
 

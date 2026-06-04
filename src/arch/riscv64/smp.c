@@ -56,7 +56,7 @@ static void setup_scratch(int cpu) {
 }
 
 /* Assembly entry for secondary harts — defined in head.S */
-extern "C" void _start_secondary(void);
+void _start_secondary(void);
 
 void smp_boot_secondaries(void) {
     g_cpu_count = 1;
@@ -95,7 +95,7 @@ void smp_boot_secondaries(void) {
  * Called from _start_secondary in head.S with logical CPU ID in a0,
  * scratch pointer in a1.
  */
-extern "C" void secondary_start(int cpu) {
+void secondary_start(int cpu) {
     /* Set up sscratch for this CPU */
     csrw(CSR_SSCRATCH, (u64)g_scratch[cpu]);
 

@@ -11,30 +11,29 @@ ARCH_DIR := src/arch/aarch64
 LINKER_SCRIPT := $(ARCH_DIR)/linker.lds
 ARCH_COPTS :=
 ARCH_LINKOPTS := -Wl,--no-warn-rwx-segments
-ARCH_DRIVER_SRCS := $(wildcard src/drivers/gic/*.cc) $(wildcard src/drivers/pl011/*.cc)
+ARCH_DRIVER_SRCS := $(wildcard src/drivers/gic/*.c) $(wildcard src/drivers/pl011/*.c)
 ARCH_CORE_EXCLUDES :=
 ARCH_CORE_EXTRAS :=
-ARCH_CC_EXCLUDES :=
+ARCH_C_EXCLUDES :=
 else ifeq ($(TARGET),riscv64)
 DEFAULT_CROSS_COMPILE := riscv-none-elf-
 ARCH_DIR := src/arch/riscv64
 LINKER_SCRIPT := $(ARCH_DIR)/linker.ld
 ARCH_COPTS := -mcmodel=medany -march=rv64imac_zicsr -mabi=lp64
 ARCH_LINKOPTS := -march=rv64imac_zicsr -mabi=lp64 -Wl,-m,elf64lriscv
-ARCH_DRIVER_SRCS := $(wildcard src/drivers/pl011/*.cc)
+ARCH_DRIVER_SRCS := $(wildcard src/drivers/pl011/*.c)
 ARCH_CORE_EXCLUDES := \
-    src/core/emul_gic.cc \
-    src/core/emul_gicv3.cc \
-    src/core/emul_uart.cc \
-    src/core/emul_psci.cc \
-    src/core/sched.cc
-ARCH_CORE_EXTRAS := src/arch/riscv64/sched_riscv.cc
-ARCH_CC_EXCLUDES := src/arch/riscv64/sched_riscv.cc
+    src/core/emul_gic.c \
+    src/core/emul_gicv3.c \
+    src/core/emul_uart.c \
+    src/core/emul_psci.c \
+    src/core/sched.c
+ARCH_CORE_EXTRAS := src/arch/riscv64/sched_riscv.c
+ARCH_C_EXCLUDES := src/arch/riscv64/sched_riscv.c
 endif
 
 CROSS_COMPILE ?= $(DEFAULT_CROSS_COMPILE)
 CC      := $(CROSS_COMPILE)gcc
-CXX     := $(CROSS_COMPILE)g++
 AS      := $(CROSS_COMPILE)gcc
 OBJCOPY := $(CROSS_COMPILE)objcopy
 DTC     ?= dtc
@@ -50,26 +49,11 @@ INCDIRS := \
 
 COMMON_CFLAGS := \
     -Wall \
+    -std=gnu11 \
     -D_POSIX_C_SOURCE=200809L \
     -ffreestanding \
     -fno-stack-protector \
     -fno-builtin \
-    -O0 \
-    -g \
-    $(ARCH_COPTS)
-
-COMMON_CXXFLAGS := \
-    -std=gnu++17 \
-    -Wall \
-    -Wextra \
-    -Wno-unused-parameter \
-    -D_POSIX_C_SOURCE=200809L \
-    -ffreestanding \
-    -fno-stack-protector \
-    -fno-builtin \
-    -fno-exceptions \
-    -fno-rtti \
-    -fno-threadsafe-statics \
     -O0 \
     -g \
     $(ARCH_COPTS)
@@ -84,18 +68,16 @@ LDFLAGS := \
     $(ARCH_LINKOPTS)
 LDLIBS := -lc -lgcc
 
-ARCH_CC_SRCS := $(filter-out $(ARCH_CC_EXCLUDES),$(wildcard $(ARCH_DIR)/*.cc))
+ARCH_C_SRCS := $(filter-out $(ARCH_C_EXCLUDES),$(wildcard $(ARCH_DIR)/*.c))
 AS_SRCS := $(wildcard $(ARCH_DIR)/*.S)
-CORE_SRCS := $(filter-out $(ARCH_CORE_EXCLUDES),$(wildcard src/core/*.cc)) $(ARCH_CORE_EXTRAS) src/main.cc
-CXX_RUNTIME_SRCS := $(wildcard src/cxx_core/*.cc)
-UTIL_SRCS := $(wildcard src/utils/*.c) $(wildcard src/utils/*.cc)
+CORE_SRCS := $(filter-out $(ARCH_CORE_EXCLUDES),$(wildcard src/core/*.c)) $(ARCH_CORE_EXTRAS) src/main.c
+UTIL_SRCS := $(wildcard src/utils/*.c)
 LIBFDT_SRCS := $(wildcard third_party/libfdt/*.c)
 
 SRCS := \
     $(AS_SRCS) \
-    $(ARCH_CC_SRCS) \
+    $(ARCH_C_SRCS) \
     $(CORE_SRCS) \
-    $(CXX_RUNTIME_SRCS) \
     $(UTIL_SRCS) \
     $(ARCH_DRIVER_SRCS) \
     $(LIBFDT_SRCS)
@@ -111,7 +93,7 @@ hyper: $(OUT)/hyper-elf $(OUT)/core.bin $(OUT)/hyper.dtb
 
 $(OUT)/hyper-elf: check-tools $(OBJS) $(BUILD_DIR)/linker.lds
 	@mkdir -p $(dir $@)
-	$(CXX) $(LDFLAGS) -o $@ $(OBJS) $(LDLIBS)
+	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LDLIBS)
 
 $(OUT)/core.bin: $(OUT)/hyper-elf
 	$(OBJCOPY) -O binary $< $@
@@ -132,13 +114,8 @@ $(BUILD_DIR)/%.c.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(COMMON_CFLAGS) $(INCDIRS) -MMD -MP -c -o $@ $<
 
-$(BUILD_DIR)/%.cc.o: %.cc
-	@mkdir -p $(dir $@)
-	$(CXX) $(COMMON_CXXFLAGS) $(INCDIRS) -MMD -MP -c -o $@ $<
-
 check-tools:
 	@command -v $(CC) >/dev/null || { echo "missing compiler: $(CC)"; exit 1; }
-	@command -v $(CXX) >/dev/null || { echo "missing compiler: $(CXX)"; exit 1; }
 	@command -v $(OBJCOPY) >/dev/null || { echo "missing objcopy: $(OBJCOPY)"; exit 1; }
 	@command -v $(DTC) >/dev/null || { echo "missing dtc: $(DTC)"; exit 1; }
 
@@ -152,7 +129,6 @@ print-config:
 	@printf 'TARGET=%s\n' '$(TARGET)'
 	@printf 'CROSS_COMPILE=%s\n' '$(CROSS_COMPILE)'
 	@printf 'CC=%s\n' '$(CC)'
-	@printf 'CXX=%s\n' '$(CXX)'
 	@printf 'OUT=%s\n' '$(OUT)'
 	@printf 'BUILD_DIR=%s\n' '$(BUILD_DIR)'
 	@printf 'LINKER_SCRIPT=%s\n' '$(LINKER_SCRIPT)'

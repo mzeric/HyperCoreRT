@@ -2,11 +2,5 @@
 
 #include "vcpu.h"
 
-class RiscvVcpuContextManager final {
-public:
-    static void Save(vcpu_t *vcpu);
-    static void Restore(vcpu_t *vcpu);
-
-private:
-    RiscvVcpuContextManager() = delete;
-};
+void riscv_vcpu_context_save_manager(vcpu_t *vcpu);
+void riscv_vcpu_context_restore_manager(vcpu_t *vcpu);

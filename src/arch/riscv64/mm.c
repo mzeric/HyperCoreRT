@@ -37,12 +37,12 @@ void hfence() {
 }
 
 static u64 host_satp_value(void) {
-    return (reinterpret_cast<uintptr_t>(page_table_root) >> 12)
+    return ((uintptr_t)page_table_root >> 12)
            | (SATP_MODE_SV48 << 60);
 }
 
 static u64 guest_hgatp_value(void) {
-    return (reinterpret_cast<uintptr_t>(page_stage2_table_root) >> 12)
+    return ((uintptr_t)page_stage2_table_root >> 12)
            | (SATP_MODE_SV48 << 60);
 }
 

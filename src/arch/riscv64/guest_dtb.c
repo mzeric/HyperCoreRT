@@ -20,7 +20,7 @@
 #define GUEST_PLIC_SIZE  0x400000UL
 #define GUEST_PLIC_PHANDLE 0x100u
 
-struct fdt_header_min {
+typedef struct fdt_header_min {
     u32 magic;
     u32 totalsize;
     u32 off_dt_struct;
@@ -31,7 +31,7 @@ struct fdt_header_min {
     u32 boot_cpuid_phys;
     u32 size_dt_strings;
     u32 size_dt_struct;
-};
+} fdt_header_min;
 
 static u64 g_guest_entry = RISCV_DEFAULT_GUEST_ENTRY;
 static u64 g_guest_dtb_addr = RISCV_DEFAULT_GUEST_DTB_ADDR;

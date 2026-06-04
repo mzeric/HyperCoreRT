@@ -8,14 +8,7 @@ struct RiscvSbiResult {
     u64 value;
 };
 
-class RiscvSbiManager final {
-public:
-    static bool IsExtensionSupported(u64 extension_id);
-    static RiscvSbiResult NotSupported(void);
-    static void HandleVsEcall(struct cpu_user_regs *args);
-
-private:
-    RiscvSbiManager() = delete;
-};
-
+bool riscv_sbi_extension_supported(u64 extension_id);
+struct RiscvSbiResult riscv_sbi_not_supported(void);
+void riscv_sbi_handle_vs_ecall(struct cpu_user_regs *args);
 void riscv_handle_vs_ecall(struct cpu_user_regs *args);

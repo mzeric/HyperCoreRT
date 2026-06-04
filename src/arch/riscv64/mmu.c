@@ -82,11 +82,10 @@ static int pg_next_level(ptw_t **vtable, unsigned int level, unsigned int offset
             // safe_printf("alloc s2 page 0x%lx v:%p\n", fn, PAGE_VIR(fn));
             if (fn < 0) {
                 safe_printf("out-of-memory for ptw map\n");
+                return -1;
             }
-            if (without_mmu)
-                memset((void *)PAGE_PHY(fn), 0, PAGE_SIZE);
-            else
-                memset((void *)PAGE_VIR(fn), 0, PAGE_SIZE);
+            u64 page_addr = without_mmu ? PAGE_PHY(fn) : PAGE_VIR(fn);
+            memset((void *)(uintptr_t)page_addr, 0, PAGE_SIZE);
 
             *entry = make_pg_entry(PAGE_PHY(fn), attr);
             // alloc a page for pte
@@ -122,7 +121,8 @@ static int __pg_map(ptw_t *root, int start_level, int end_level, vaddr_t vaddr, 
 
     for (level = start_level; level < end_level; ++level) {
         // hyper_info("table:%p", table);
-        pg_next_level(&table, level, pte_offset(vaddr, level), 0, without_mmu);
+        if (pg_next_level(&table, level, pte_offset(vaddr, level), 0, without_mmu) != 0)
+            return -1;
     }
 
     // map last pte

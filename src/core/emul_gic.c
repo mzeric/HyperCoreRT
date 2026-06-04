@@ -3,7 +3,6 @@
 #include "sched.h"
 #include "sched_simple.h"
 #include "spin_lock.h"
-#include "spin_lock_guard.h"
 #include "src/drivers/gic/gicv3.h"
 #include "sys_reg.h"
 
@@ -261,24 +260,28 @@ void gic_vcpu_init_pcpu(void) {
 void gic_vcpu_inject_virq(hyper_task_t *task, int virq) {
 	if (!task)
 		return;
-	SpinLockGuard guard(task->virq_lock);
+	arch_spin_lock(&task->virq_lock);
 	if (task->pending_virq_count >= VCPU_MAX_PENDING_VIRQ) {
 		hyper_warn("vgic: pending virq full on task %d, dropping irq %d",
 		         task->id, virq);
+		arch_spin_unlock(&task->virq_lock);
 		return;
 	}
 	/* De-dup: if already queued, don't double-pend. */
 	for (int i = 0; i < task->pending_virq_count; ++i) {
-		if (task->pending_virq[i] == virq)
+		if (task->pending_virq[i] == virq) {
+			arch_spin_unlock(&task->virq_lock);
 			return;
+		}
 	}
 	task->pending_virq[task->pending_virq_count++] = virq;
+	arch_spin_unlock(&task->virq_lock);
 }
 
 void gic_vcpu_flush_lr(hyper_task_t *task) {
 	if (!task)
 		return;
-	SpinLockGuard guard(task->virq_lock);
+	arch_spin_lock(&task->virq_lock);
 	int keep = 0;
 	for (int i = 0; i < task->pending_virq_count; ++i) {
 		int slot = -1;
@@ -302,21 +305,29 @@ void gic_vcpu_flush_lr(hyper_task_t *task) {
 	}
 	asm volatile("isb" ::: "memory");
 	task->pending_virq_count = keep;
+	arch_spin_unlock(&task->virq_lock);
 }
 
 hyper_task_t *find_task_by_mpidr(uint64_t mpidr) {
 	mpidr = gic_emul_mpidr_affinity(mpidr);
-	SpinLockGuard guard(g_sched_lock);
+	hyper_task_t *found = NULL;
+	arch_spin_lock(&g_sched_lock);
 	/* Check all pCPUs' running tasks */
 	for (int i = 0; i < CONFIG_SMP_CPU_NUM; i++) {
-		if (g_running[i] && gic_emul_mpidr_affinity(g_running[i]->mpidr) == mpidr)
-			return g_running[i];
+		if (g_running[i] && gic_emul_mpidr_affinity(g_running[i]->mpidr) == mpidr) {
+			found = g_running[i];
+			goto out;
+		}
 	}
 	/* Check ready list */
 	hyper_task_t *t;
 	list_for_each_entry(t, &g_ready_list, list) {
-		if (gic_emul_mpidr_affinity(t->mpidr) == mpidr)
-			return t;
+		if (gic_emul_mpidr_affinity(t->mpidr) == mpidr) {
+			found = t;
+			goto out;
+		}
 	}
-	return NULL;
+out:
+	arch_spin_unlock(&g_sched_lock);
+	return found;
 }

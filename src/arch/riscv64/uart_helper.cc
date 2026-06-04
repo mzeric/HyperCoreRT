@@ -1,1 +1,0 @@
-extern "C" void arch_putchar(char ch) {*(volatile int *)0x10000000 = ch; }

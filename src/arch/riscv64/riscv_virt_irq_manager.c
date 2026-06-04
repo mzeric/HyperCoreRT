@@ -3,13 +3,13 @@
 #include "inline_asm.h"
 #include "sched.h"
 
-u64 RiscvVirtIrqManager::IrqBit(u32 irq) {
+static u64 riscv_virt_irq_bit(u32 irq) {
     if (irq >= 64)
         return 0;
     return 1UL << irq;
 }
 
-u64 RiscvVirtIrqManager::PendingImage(vcpu_t *vcpu) {
+u64 riscv_virt_irq_pending_image(vcpu_t *vcpu) {
     if (!vcpu)
         return 0;
 
@@ -20,8 +20,8 @@ u64 RiscvVirtIrqManager::PendingImage(vcpu_t *vcpu) {
     return image;
 }
 
-void RiscvVirtIrqManager::Assert(vcpu_t *vcpu, u32 irq) {
-    u64 bit = IrqBit(irq);
+void riscv_virt_irq_assert(vcpu_t *vcpu, u32 irq) {
+    u64 bit = riscv_virt_irq_bit(irq);
     if (!vcpu || !bit)
         return;
 
@@ -35,8 +35,8 @@ void RiscvVirtIrqManager::Assert(vcpu_t *vcpu, u32 irq) {
     arch_spin_unlock_irqrestore(&vcpu->carch.virt_irq_lock, flags);
 }
 
-void RiscvVirtIrqManager::Clear(vcpu_t *vcpu, u32 irq) {
-    u64 bit = IrqBit(irq);
+void riscv_virt_irq_clear(vcpu_t *vcpu, u32 irq) {
+    u64 bit = riscv_virt_irq_bit(irq);
     if (!vcpu || !bit)
         return;
 
@@ -50,7 +50,7 @@ void RiscvVirtIrqManager::Clear(vcpu_t *vcpu, u32 irq) {
     arch_spin_unlock_irqrestore(&vcpu->carch.virt_irq_lock, flags);
 }
 
-void RiscvVirtIrqManager::Materialize(vcpu_t *vcpu) {
+void riscv_virt_irq_materialize(vcpu_t *vcpu) {
     if (!vcpu)
         return;
 
@@ -64,20 +64,8 @@ void RiscvVirtIrqManager::Materialize(vcpu_t *vcpu) {
     arch_spin_unlock_irqrestore(&vcpu->carch.virt_irq_lock, flags);
 }
 
-void riscv_virt_irq_assert(vcpu_t *vcpu, u32 irq) {
-    RiscvVirtIrqManager::Assert(vcpu, irq);
-}
-
-void riscv_virt_irq_clear(vcpu_t *vcpu, u32 irq) {
-    RiscvVirtIrqManager::Clear(vcpu, irq);
-}
-
-void riscv_virt_irq_materialize(vcpu_t *vcpu) {
-    RiscvVirtIrqManager::Materialize(vcpu);
-}
-
 void riscv_virt_irq_materialize_current(void) {
     hyper_task_t *task = current_task();
     if (task)
-        RiscvVirtIrqManager::Materialize(task->vcpu);
+        riscv_virt_irq_materialize(task->vcpu);
 }

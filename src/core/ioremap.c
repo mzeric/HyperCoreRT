@@ -37,7 +37,7 @@ typedef struct bitmap {
 
 bitmap_t create_bitmap(uint64_t start, int ele_size, int bit_nr) {
     bitmap_t b = (bitmap_t){
-        .data = nullptr,
+        .data = NULL,
         .start = start,
         .ele_size = ele_size,
         .bit_nr = (uint64_t)bit_nr,

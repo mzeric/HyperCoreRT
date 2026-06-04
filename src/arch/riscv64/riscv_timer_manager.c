@@ -5,7 +5,7 @@
 #include "sched.h"
 #include "timer.h"
 
-void RiscvTimerManager::Arm(vcpu_t *vcpu, u64 deadline_cycles) {
+void riscv_timer_arm(vcpu_t *vcpu, u64 deadline_cycles) {
     if (!vcpu)
         return;
 
@@ -13,10 +13,10 @@ void RiscvTimerManager::Arm(vcpu_t *vcpu, u64 deadline_cycles) {
     vcpu->carch.timer.armed = 1;
     vcpu->carch.timer.pending = 0;
     riscv_virt_irq_clear(vcpu, IRQ_VS_TIMER);
-    Refresh(vcpu);
+    riscv_timer_refresh(vcpu);
 }
 
-void RiscvTimerManager::Clear(vcpu_t *vcpu) {
+void riscv_timer_clear(vcpu_t *vcpu) {
     if (!vcpu)
         return;
 
@@ -25,7 +25,7 @@ void RiscvTimerManager::Clear(vcpu_t *vcpu) {
     riscv_virt_irq_clear(vcpu, IRQ_VS_TIMER);
 }
 
-void RiscvTimerManager::Refresh(vcpu_t *vcpu) {
+void riscv_timer_refresh(vcpu_t *vcpu) {
     if (!vcpu || !vcpu->carch.timer.armed)
         return;
     if (get_cycles() < vcpu->carch.timer.deadline_cycles)
@@ -42,17 +42,17 @@ static vcpu_t *riscv_current_vcpu(void) {
 }
 
 void riscv_vcpu_timer_arm_current(u64 deadline_cycles) {
-    RiscvTimerManager::Arm(riscv_current_vcpu(), deadline_cycles);
+    riscv_timer_arm(riscv_current_vcpu(), deadline_cycles);
 }
 
 void riscv_vcpu_timer_clear_current(void) {
-    RiscvTimerManager::Clear(riscv_current_vcpu());
+    riscv_timer_clear(riscv_current_vcpu());
 }
 
 void riscv_vcpu_timer_refresh(vcpu_t *vcpu) {
-    RiscvTimerManager::Refresh(vcpu);
+    riscv_timer_refresh(vcpu);
 }
 
 void riscv_vcpu_timer_refresh_current(void) {
-    RiscvTimerManager::Refresh(riscv_current_vcpu());
+    riscv_timer_refresh(riscv_current_vcpu());
 }

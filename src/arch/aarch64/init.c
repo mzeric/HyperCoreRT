@@ -33,10 +33,10 @@
 void timer_init(void);
 
 #ifdef CONFIG_BOARD_QEMU_VIRT
-extern "C" void arch_putchar(char ch) { *(volatile int *)0x09000000 = ch; }
+void arch_putchar(char ch) { *(volatile int *)0x09000000 = ch; }
 
 #elif defined(CONFIG_BOARD_FVP_AEMVA)
-extern "C" void arch_putchar(char ch) { *(volatile int *)0x1c090000 = ch; }
+void arch_putchar(char ch) { *(volatile int *)0x1c090000 = ch; }
 #endif
 
 struct mmu_lpae_entry_ctrl {

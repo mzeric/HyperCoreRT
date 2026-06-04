@@ -86,8 +86,8 @@ Makefile 通过 `CROSS_COMPILE=/path/to/prefix-` 使用本机交叉工具链。B
 
 #### 依赖
 
-- AArch64：`aarch64-none-elf-gcc/g++/objcopy` 或兼容裸机/newlib 交叉工具链
-- RISC-V：`riscv-none-elf-gcc/g++/objcopy` 或兼容裸机/newlib 交叉工具链
+- AArch64：`aarch64-none-elf-gcc/objcopy` 或兼容裸机/newlib 交叉工具链
+- RISC-V：`riscv-none-elf-gcc/objcopy` 或兼容裸机/newlib 交叉工具链
 - `dtc`（设备树编译器）
 - `make`
 
@@ -126,7 +126,7 @@ make TARGET=aarch64 CROSS_COMPILE=aarch64-linux-gnu-
 
 注意：默认使用 `*-none-elf` 裸机/newlib 工具链，是因为当前 Hypervisor 虽然运行在裸机环境，但仍依赖工具链 libc/newlib 提供的基础符号，例如 `printf`、`memset`、`memmove`、`memcmp`、`strlen`、`strnlen` 等。`riscv64-linux-gnu-` 这类 Linux glibc 工具链通常不适合当前 `rv64imac/lp64` 裸机配置。
 
-Makefile 使用 `-std=gnu++17`。代码基线仍是 C++17，但当前代码使用了 `typeof`、statement expression 等 GNU 扩展，因此直编入口需要启用 GNU C++17 方言。
+Makefile 使用 `-std=gnu11`。当前代码已经回到 C 路径，但仍使用 `typeof`、statement expression 等 GNU 扩展，因此直编入口需要启用 GNU C 方言。
 
 | 文件 | 说明 |
 |------|------|
